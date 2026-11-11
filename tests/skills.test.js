@@ -23,7 +23,7 @@ test('more multipliers stack multiplicatively', () => {
   const a = computeStats(char({ id: 'fireball', supports: [] }));
   const b = computeStats(char({ id: 'fireball', supports: ['brutality', 'focused_strike'] }));
   near(b.damage.dps, a.damage.dps * 1.4 * 1.6, 'dps');
-  near(b.damage.manaCost, Math.round(6 * 1.4 * 1.4 * 10) / 10, 'mana');
+  near(b.damage.manaCost, Math.round(4 * 1.4 * 1.4 * 10) / 10, 'mana');
 });
 
 test('Wide Arc adds 2 targets and 15% less damage; only for Area/Chain skills', () => {

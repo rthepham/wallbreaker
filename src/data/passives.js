@@ -13,97 +13,101 @@ export const KEYSTONES = {
     text: ['You cannot evade attacks', 'Armour also reduces elemental hits, at half effect'],
     mods: [L('cannotEvade', 1), L('armourVsElemental', 50)],
   },
-  last_stand: {
-    name: 'Last Stand',
-    text: ['50% more damage while below 35% life', 'Life regeneration is disabled during fights'],
-    mods: [L('lowLifeMore', 50), L('noRegen', 1)],
+  ember_heart: {
+    name: 'Ember Heart',
+    text: ['All your damage is converted to fire', 'Your hits ignore 15% of enemy fire resistance', '+15% chance to ignite'],
+    mods: [L('convertAllToFire', 100), L('firePenetration', 15), L('igniteChance', 15)],
   },
-  steady_hand: {
-    name: 'Steady Hand',
-    text: ['You never deal critical strikes', '40% more damage'],
-    mods: [L('noCrit', 1), MORE('damage', 40)],
+  reckless_tempo: {
+    name: 'Reckless Tempo',
+    text: ['35% more attack and cast speed', '20% less maximum life'],
+    mods: [MORE('speed', 35), MORE('life', -20)],
   },
   spread_thin: {
     name: 'Spread Thin',
-    text: ['Skills hit double their targets', '35% less damage'],
-    mods: [L('targetMultPct', 100), MORE('damage', -35)],
+    text: ['Skills hit double their targets', '25% less damage'],
+    mods: [L('targetMultPct', 100), MORE('damage', -25)],
   },
   blood_price: {
     name: 'Blood Price',
-    text: ['Skills cost life instead of mana'],
-    mods: [L('lifeCost', 1)],
+    text: ['Skills cost life instead of mana', '25% more damage'],
+    mods: [L('lifeCost', 1), MORE('damage', 25)],
   },
   bulwark: {
     name: 'Bulwark of Will',
-    text: ['+5% to all maximum resistances', '20% less maximum life'],
-    mods: [L('maxFireRes', 5), L('maxColdRes', 5), L('maxLightningRes', 5), L('maxChaosRes', 5), MORE('life', -20)],
+    text: ['+5% to all maximum resistances', '+20% to fire, cold and lightning resistance', '15% less maximum life'],
+    mods: [
+      L('maxFireRes', 5), L('maxColdRes', 5), L('maxLightningRes', 5), L('maxChaosRes', 5),
+      L('fireRes', 20), L('coldRes', 20), L('lightningRes', 20), MORE('life', -15),
+    ],
   },
 };
 
 // Each branch: 3 small nodes, a notable, then (optionally) 2 small and a keystone.
+// Small nodes are deliberately chunky so one point is something you can feel.
 const REGIONS = [
   {
     id: 'might', name: 'Might', angle: -90,
-    gate: [L('life', 10)],
+    gate: [L('life', 20)],
     branches: [
       {
-        smalls: [[L('armour', 20)], [L('life', 10)], [L('armour', 20)]],
-        notable: { name: 'Ironbound', mods: [INC('armour', 25), L('armour', 30)] },
-        tail: [[INC('life', 4)], [L('armour', 25)]],
+        smalls: [[L('armour', 30)], [L('life', 15)], [L('armour', 30)]],
+        notable: { name: 'Ironbound', mods: [INC('armour', 30), L('armour', 40), INC('life', 6)] },
+        tail: [[L('life', 20)], [L('armour', 40)]],
         keystone: 'iron_hide',
       },
       {
-        smalls: [[INC('physical', 8)], [INC('physical', 8)], [INC('attackSpeed', 4)]],
-        notable: { name: 'Heavy Blows', mods: [INC('physical', 25), INC('attack', 10)] },
+        smalls: [[INC('physical', 15)], [INC('stun', 25)], [INC('physical', 15)]],
+        notable: { name: 'Crushing Blows', mods: [INC('physical', 30), INC('stun', 50)] },
       },
       {
-        smalls: [[L('life', 10)], [L('lifeRegen', 1.5)], [L('life', 10)]],
-        notable: { name: 'Unbreaking', mods: [INC('life', 8), L('lifeRegen', 2)] },
-        tail: [[INC('damage', 6)], [L('life', 12)]],
-        keystone: 'last_stand',
+        smalls: [[INC('fire', 15)], [L('igniteChance', 8)], [INC('fire', 15)]],
+        notable: { name: 'Kindled Fury', mods: [INC('ignite', 50), L('igniteChance', 10)] },
+        tail: [[INC('fire', 15)], [INC('ignite', 25)]],
+        keystone: 'ember_heart',
       },
     ],
   },
   {
     id: 'finesse', name: 'Finesse', angle: 30,
-    gate: [L('evasion', 20)],
+    gate: [L('evasion', 30)],
     branches: [
       {
-        smalls: [[INC('damage', 6)], [INC('attackSpeed', 4)], [INC('damage', 6)]],
-        notable: { name: 'Relentless', mods: [INC('attackSpeed', 8), INC('castSpeed', 8), INC('damage', 10)] },
-        tail: [[INC('attackSpeed', 3)], [INC('castSpeed', 3)]],
-        keystone: 'steady_hand',
+        smalls: [[INC('attackSpeed', 6)], [INC('castSpeed', 6)], [INC('damage', 10)]],
+        notable: { name: 'Relentless', mods: [INC('attackSpeed', 10), INC('castSpeed', 10)] },
+        tail: [[INC('attackSpeed', 5)], [INC('castSpeed', 5)]],
+        keystone: 'reckless_tempo',
       },
       {
-        smalls: [[INC('critChance', 12)], [L('critMulti', 8)], [INC('critChance', 12)]],
-        notable: { name: 'Killer Instinct', mods: [INC('critChance', 30), L('critMulti', 20)] },
+        smalls: [[INC('critChance', 25)], [L('critMulti', 12)], [INC('critChance', 25)]],
+        notable: { name: 'Killer Instinct', mods: [INC('critChance', 50), L('critMulti', 25)] },
       },
       {
-        smalls: [[L('evasion', 20)], [INC('castSpeed', 4)], [L('evasion', 20)]],
-        notable: { name: 'Sweeping Reach', mods: [L('targets', 1)] },
-        tail: [[INC('evasion', 10)], [L('evasion', 25)]],
+        smalls: [[L('evasion', 30)], [INC('damage', 10)], [L('evasion', 30)]],
+        notable: { name: 'Sweeping Reach', mods: [L('targets', 1), INC('evasion', 20)] },
+        tail: [[L('evasion', 40)], [INC('damage', 10)]],
         keystone: 'spread_thin',
       },
     ],
   },
   {
     id: 'mind', name: 'Mind', angle: 150,
-    gate: [L('mana', 15)],
+    gate: [L('mana', 20)],
     branches: [
       {
-        smalls: [[INC('spell', 10)], [L('mana', 15)], [INC('spell', 10)]],
-        notable: { name: 'Arcane Focus', mods: [INC('spell', 25), L('mana', 20)] },
-        tail: [[INC('spell', 8)], [INC('castSpeed', 3)]],
+        smalls: [[INC('spell', 15)], [INC('manaRegen', 20)], [INC('spell', 15)]],
+        notable: { name: 'Arcane Focus', mods: [INC('spell', 30), L('mana', 30)] },
+        tail: [[INC('spell', 15)], [INC('manaRegen', 25)]],
         keystone: 'blood_price',
       },
       {
-        smalls: [[INC('manaRegen', 15)], [INC('elemental', 10)], [INC('manaRegen', 15)]],
-        notable: { name: 'Wellspring', mods: [INC('manaRegen', 40), L('mana', 20)] },
+        smalls: [[INC('lightning', 15)], [L('shockChance', 8)], [INC('cold', 15)]],
+        notable: { name: 'Storm and Frost', mods: [INC('shock', 50), INC('chill', 40), L('shockChance', 8)] },
       },
       {
-        smalls: [[L('fireRes', 8)], [L('coldRes', 8)], [L('lightningRes', 8)]],
+        smalls: [[L('fireRes', 10)], [L('lightningRes', 10)], [L('coldRes', 10)]],
         notable: { name: 'Elemental Ward', mods: [L('fireRes', 12), L('coldRes', 12), L('lightningRes', 12)] },
-        tail: [[INC('elemental', 10)], [L('fireRes', 6)]],
+        tail: [[L('fireRes', 10)], [L('lightningRes', 10)]],
         keystone: 'bulwark',
       },
     ],

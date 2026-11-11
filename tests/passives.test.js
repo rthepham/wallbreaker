@@ -21,6 +21,7 @@ function pathTo(id) {
     const c = q.shift();
     for (const n of PASSIVES[c].links) if (!(n in prev)) { prev[n] = c; q.push(n); }
   }
+  if (!(id in prev)) throw new Error(`No node ${id}`);
   const out = [];
   for (let c = id; c !== 'origin'; c = prev[c]) out.unshift(c);
   return out;
@@ -69,26 +70,26 @@ test('bonus points for first clear of zone 5', () => {
   assert.equal(passivePoints(g), 11);
 });
 
-test('Steady Hand: no crits, 40% more damage', () => {
+test('Reckless Tempo: 35% more speed, 20% less life', () => {
   const a = computeStats(char(pathTo('finesse_0_t1')));
-  const b = computeStats(char(pathTo('steady_hand')));
-  assert.equal(b.damage.critChance, 0);
-  const ratio = b.damage.dps / a.damage.dps;
-  assert.ok(Math.abs(ratio - 1.4 / a.damage.critFactor) < 1e-9);
+  const b = computeStats(char(pathTo('reckless_tempo')));
+  assert.ok(Math.abs(b.damage.aps / a.damage.aps - 1.35) < 1e-9);
+  assert.equal(b.life, Math.round(a.life * 0.8));
 });
 
 test('Spread Thin doubles targets for 35% less damage', () => {
   const a = computeStats(char(pathTo('finesse_2_t1')));
   const b = computeStats(char(pathTo('spread_thin')));
   assert.equal(b.damage.targets, a.damage.targets * 2);
-  assert.ok(Math.abs(b.damage.dps / a.damage.dps - 0.65) < 1e-9);
+  assert.ok(Math.abs(b.damage.dps / a.damage.dps - 0.75) < 1e-9);
 });
 
-test('Bulwark of Will: +5% max res, 20% less life', () => {
+test('Bulwark of Will: +5% max res, +20% resistances, 15% less life', () => {
   const a = computeStats(char(pathTo('mind_2_t1')));
   const b = computeStats(char(pathTo('bulwark')));
   assert.equal(b.maxRes.fire, 80);
-  assert.equal(b.life, Math.round(a.life * 0.8));
+  assert.equal(b.res.fire, a.res.fire + 20);
+  assert.equal(b.life, Math.round(a.life * 0.85));
 });
 
 test('Iron Hide: no evasion, armour helps against fire', () => {
@@ -112,10 +113,18 @@ test('Blood Price: skills cost life, and the character still fights', () => {
   assert.equal(g.player.mana, mana);
 });
 
-test('Last Stand: no regen during fights', () => {
-  const b = computeStats(char(pathTo('last_stand')));
-  assert.equal(b.lifeRegen, 0);
-  assert.equal(b.damage.lowLifeMore, 50);
+test('Ember Heart: Cleave deals all fire damage and ignores some fire resistance', () => {
+  const b = computeStats(char(pathTo('ember_heart')));
+  assert.deepEqual(b.damage.parts.map((p) => p.type), ['fire']);
+  assert.equal(b.damage.firePenetration, 15);
+  assert.ok(b.damage.ailments.igniteChance >= 25);
+});
+
+test('Blood Price: 25% more damage', () => {
+  const path = pathTo('blood_price');
+  const a = computeStats(char(path.slice(0, -1)));
+  const b = computeStats(char(path));
+  assert.ok(Math.abs(b.damage.dps / a.damage.dps - 1.25) < 1e-9);
 });
 
 test('every keystone has a working rule text', () => {

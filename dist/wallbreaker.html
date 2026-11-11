@@ -136,6 +136,12 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .mon { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 0.85rem; }
 .mon-name { display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .mon.dead { opacity: 0.35; }
+.mon-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.mon-bar .bar { flex: 1; min-width: 40px; }
+.tags { display: flex; gap: 3px; flex: none; }
+.st { font-size: 0.68rem; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.st-fire { color: var(--t-fire); } .st-lightning { color: var(--t-lightning); } .st-cold { color: var(--t-cold); } .st-physical { color: var(--t-physical); }
+.dt-physical { color: var(--t-physical); }
 .mon.r-magic .mon-name { color: var(--r-magic); }
 .mon.r-rare .mon-name { color: var(--r-rare); }
 .mon.r-boss .mon-name { color: var(--r-boss); font-weight: 600; }
@@ -353,6 +359,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <h3>The loop</h3>
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
+          <li><b>Damage types matter.</b> Fire sets enemies burning (great on bosses). Lightning shocks them so they take more damage. Cold chills them so they attack slower. Heavy physical hits stun. Some enemies resist a type: Brutes shrug off physical, casters resist their own element. The zone header shows who resists what.</li>
           <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
           <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>
         </ul>
@@ -463,6 +470,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       interval: 2,
       hitMult: 2.5,
       lifeMult: 1.2,
+      // Thick hide: physical hits deal less. Tests attack builds.
+      res: { physical: 30 },
       xpMult: 1.4,
       dropMult: 1.2,
       names: ["Quarry Ogre", "Slagback", "Hollow Brute", "Stonejaw"]
@@ -473,6 +482,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       damageType: "fire",
       interval: 1,
       hitMult: 1.5,
+      // Casters resist their own element.
+      ownElementRes: 40,
       lifeMult: 0.8,
       xpMult: 1.1,
       dropMult: 1,
@@ -523,7 +534,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         { threat: "swarm", weight: 2 },
         { threat: "brute", weight: 3 }
       ],
-      boss: { name: "Foreman Gath", damageType: "physical" },
+      boss: { name: "Foreman Gath", damageType: "physical", res: { physical: 30 } },
       targetPackSeconds: 6
     },
     {
@@ -536,7 +547,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         { threat: "brute", weight: 0.5 },
         { threat: "caster", element: "fire", weight: 3 }
       ],
-      boss: { name: "The Pyre Warden", damageType: "fire" },
+      boss: { name: "The Pyre Warden", damageType: "fire", res: { fire: 40 } },
       targetPackSeconds: 6
     },
     {
@@ -547,9 +558,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       mix: [
         { threat: "swarm", weight: 1 },
         { threat: "brute", weight: 1.5 },
-        { threat: "caster", element: "fire", weight: 2 }
+        { threat: "caster", element: "fire", weight: 1 },
+        { threat: "caster", element: "lightning", weight: 1.5 }
       ],
-      boss: { name: "Ashborn Colossus", damageType: "physical" },
+      boss: { name: "Ashborn Colossus", damageType: "physical", res: { physical: 30, fire: 30 } },
       targetPackSeconds: 6
     }
   ];
@@ -859,7 +871,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       manaCost: 4,
       targets: 3,
       tags: ["Attack", "Melee", "Area"],
-      description: "A wide swing. Uses your weapon\u2019s damage and speed. Hits 3 enemies."
+      description: "A wide swing that hits 3 enemies. Scales with your weapon. Heavy hits stun, pausing enemy attacks. Brutes shrug off some physical damage."
     },
     fireball: {
       name: "Fireball",
@@ -873,13 +885,15 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       castRate: 1.25,
       crit: 6,
       // DOC: doc says 10. Lowered with the mana regen change.
-      manaCost: 6,
+      manaCost: 4,
       targets: 1,
       splash: 2,
       splashMult: 0.5,
       damageMore: 1,
-      tags: ["Spell", "Projectile"],
-      description: "Hits one enemy hard, and splashes 2 more for half damage. Scales with your level."
+      tags: ["Spell", "Projectile", "Fire"],
+      // Extra ignite chance on top of the base 10% for fire hits.
+      mods: [{ stat: "igniteChance", kind: "flat", value: 25 }],
+      description: "Hits one enemy hard and splashes 2 more for half damage. Often sets enemies burning, which melts bosses. Fire casters resist it."
     },
     arc: {
       name: "Arc",
@@ -890,14 +904,30 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       growth: 1.065,
       castRate: 1.4,
       crit: 5,
-      manaCost: 7,
+      // Deliberately hungry: Arc's weakness is mana.
+      manaCost: 5,
       targets: 4,
       damageMore: 1,
-      tags: ["Spell", "Chain"],
-      description: "Chains between 4 enemies at full damage. Wide damage range. Scales with your level."
+      tags: ["Spell", "Chain", "Lightning"],
+      mods: [{ stat: "shockChance", kind: "flat", value: 25 }],
+      description: "Chains between 4 enemies at full damage. Often shocks them so they take more damage. Hungry for mana."
+    },
+    ice_nova: {
+      name: "Ice Nova",
+      kind: "spell",
+      damageType: "cold",
+      base: [3, 6],
+      growth: 1.065,
+      castRate: 1.1,
+      crit: 6,
+      manaCost: 4.5,
+      targets: 5,
+      damageMore: 1,
+      tags: ["Spell", "Area", "Cold"],
+      description: "A ring of frost that hits 5 enemies. Every hit chills, so enemies attack 30% slower. Lower damage, safer fights. Nothing resists cold yet."
     }
   };
-  var SKILL_ORDER = ["cleave", "fireball", "arc"];
+  var SKILL_ORDER = ["cleave", "fireball", "arc", "ice_nova"];
   var SUPPORTS = {
     brutality: {
       name: "Brutality",
@@ -941,6 +971,13 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       text: "25% more uses per second",
       mods: [{ stat: "speed", kind: "more", value: 25 }]
     },
+    pierce: {
+      name: "Pierce",
+      manaMult: 1.3,
+      requires: ["Fire", "Lightning", "Cold"],
+      text: "Hits ignore 25% of enemy elemental resistance",
+      mods: [{ stat: "penetration", kind: "flat", value: 25 }]
+    },
     focused_strike: {
       name: "Focused Strike",
       manaMult: 1.4,
@@ -949,7 +986,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       mods: [{ stat: "damage", kind: "more", value: 60 }, { stat: "singleTarget", kind: "flat", value: 1 }]
     }
   };
-  var SUPPORT_ORDER = ["brutality", "wide_arc", "searing_edge", "precision", "bloodthirst", "echo", "focused_strike"];
+  var SUPPORT_ORDER = ["brutality", "wide_arc", "searing_edge", "precision", "bloodthirst", "echo", "pierce", "focused_strike"];
   var LINKS = {
     base: 2,
     // DOC: doc unlocks the 3rd link at zone 6 and the 4th at map tier 1.
@@ -975,30 +1012,39 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       text: ["You cannot evade attacks", "Armour also reduces elemental hits, at half effect"],
       mods: [L("cannotEvade", 1), L("armourVsElemental", 50)]
     },
-    last_stand: {
-      name: "Last Stand",
-      text: ["50% more damage while below 35% life", "Life regeneration is disabled during fights"],
-      mods: [L("lowLifeMore", 50), L("noRegen", 1)]
+    ember_heart: {
+      name: "Ember Heart",
+      text: ["All your damage is converted to fire", "Your hits ignore 15% of enemy fire resistance", "+15% chance to ignite"],
+      mods: [L("convertAllToFire", 100), L("firePenetration", 15), L("igniteChance", 15)]
     },
-    steady_hand: {
-      name: "Steady Hand",
-      text: ["You never deal critical strikes", "40% more damage"],
-      mods: [L("noCrit", 1), MORE("damage", 40)]
+    reckless_tempo: {
+      name: "Reckless Tempo",
+      text: ["35% more attack and cast speed", "20% less maximum life"],
+      mods: [MORE("speed", 35), MORE("life", -20)]
     },
     spread_thin: {
       name: "Spread Thin",
-      text: ["Skills hit double their targets", "35% less damage"],
-      mods: [L("targetMultPct", 100), MORE("damage", -35)]
+      text: ["Skills hit double their targets", "25% less damage"],
+      mods: [L("targetMultPct", 100), MORE("damage", -25)]
     },
     blood_price: {
       name: "Blood Price",
-      text: ["Skills cost life instead of mana"],
-      mods: [L("lifeCost", 1)]
+      text: ["Skills cost life instead of mana", "25% more damage"],
+      mods: [L("lifeCost", 1), MORE("damage", 25)]
     },
     bulwark: {
       name: "Bulwark of Will",
-      text: ["+5% to all maximum resistances", "20% less maximum life"],
-      mods: [L("maxFireRes", 5), L("maxColdRes", 5), L("maxLightningRes", 5), L("maxChaosRes", 5), MORE("life", -20)]
+      text: ["+5% to all maximum resistances", "+20% to fire, cold and lightning resistance", "15% less maximum life"],
+      mods: [
+        L("maxFireRes", 5),
+        L("maxColdRes", 5),
+        L("maxLightningRes", 5),
+        L("maxChaosRes", 5),
+        L("fireRes", 20),
+        L("coldRes", 20),
+        L("lightningRes", 20),
+        MORE("life", -15)
+      ]
     }
   };
   var REGIONS = [
@@ -1006,23 +1052,23 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       id: "might",
       name: "Might",
       angle: -90,
-      gate: [L("life", 10)],
+      gate: [L("life", 20)],
       branches: [
         {
-          smalls: [[L("armour", 20)], [L("life", 10)], [L("armour", 20)]],
-          notable: { name: "Ironbound", mods: [INC("armour", 25), L("armour", 30)] },
-          tail: [[INC("life", 4)], [L("armour", 25)]],
+          smalls: [[L("armour", 30)], [L("life", 15)], [L("armour", 30)]],
+          notable: { name: "Ironbound", mods: [INC("armour", 30), L("armour", 40), INC("life", 6)] },
+          tail: [[L("life", 20)], [L("armour", 40)]],
           keystone: "iron_hide"
         },
         {
-          smalls: [[INC("physical", 8)], [INC("physical", 8)], [INC("attackSpeed", 4)]],
-          notable: { name: "Heavy Blows", mods: [INC("physical", 25), INC("attack", 10)] }
+          smalls: [[INC("physical", 15)], [INC("stun", 25)], [INC("physical", 15)]],
+          notable: { name: "Crushing Blows", mods: [INC("physical", 30), INC("stun", 50)] }
         },
         {
-          smalls: [[L("life", 10)], [L("lifeRegen", 1.5)], [L("life", 10)]],
-          notable: { name: "Unbreaking", mods: [INC("life", 8), L("lifeRegen", 2)] },
-          tail: [[INC("damage", 6)], [L("life", 12)]],
-          keystone: "last_stand"
+          smalls: [[INC("fire", 15)], [L("igniteChance", 8)], [INC("fire", 15)]],
+          notable: { name: "Kindled Fury", mods: [INC("ignite", 50), L("igniteChance", 10)] },
+          tail: [[INC("fire", 15)], [INC("ignite", 25)]],
+          keystone: "ember_heart"
         }
       ]
     },
@@ -1030,22 +1076,22 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       id: "finesse",
       name: "Finesse",
       angle: 30,
-      gate: [L("evasion", 20)],
+      gate: [L("evasion", 30)],
       branches: [
         {
-          smalls: [[INC("damage", 6)], [INC("attackSpeed", 4)], [INC("damage", 6)]],
-          notable: { name: "Relentless", mods: [INC("attackSpeed", 8), INC("castSpeed", 8), INC("damage", 10)] },
-          tail: [[INC("attackSpeed", 3)], [INC("castSpeed", 3)]],
-          keystone: "steady_hand"
+          smalls: [[INC("attackSpeed", 6)], [INC("castSpeed", 6)], [INC("damage", 10)]],
+          notable: { name: "Relentless", mods: [INC("attackSpeed", 10), INC("castSpeed", 10)] },
+          tail: [[INC("attackSpeed", 5)], [INC("castSpeed", 5)]],
+          keystone: "reckless_tempo"
         },
         {
-          smalls: [[INC("critChance", 12)], [L("critMulti", 8)], [INC("critChance", 12)]],
-          notable: { name: "Killer Instinct", mods: [INC("critChance", 30), L("critMulti", 20)] }
+          smalls: [[INC("critChance", 25)], [L("critMulti", 12)], [INC("critChance", 25)]],
+          notable: { name: "Killer Instinct", mods: [INC("critChance", 50), L("critMulti", 25)] }
         },
         {
-          smalls: [[L("evasion", 20)], [INC("castSpeed", 4)], [L("evasion", 20)]],
-          notable: { name: "Sweeping Reach", mods: [L("targets", 1)] },
-          tail: [[INC("evasion", 10)], [L("evasion", 25)]],
+          smalls: [[L("evasion", 30)], [INC("damage", 10)], [L("evasion", 30)]],
+          notable: { name: "Sweeping Reach", mods: [L("targets", 1), INC("evasion", 20)] },
+          tail: [[L("evasion", 40)], [INC("damage", 10)]],
           keystone: "spread_thin"
         }
       ]
@@ -1054,22 +1100,22 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       id: "mind",
       name: "Mind",
       angle: 150,
-      gate: [L("mana", 15)],
+      gate: [L("mana", 20)],
       branches: [
         {
-          smalls: [[INC("spell", 10)], [L("mana", 15)], [INC("spell", 10)]],
-          notable: { name: "Arcane Focus", mods: [INC("spell", 25), L("mana", 20)] },
-          tail: [[INC("spell", 8)], [INC("castSpeed", 3)]],
+          smalls: [[INC("spell", 15)], [INC("manaRegen", 20)], [INC("spell", 15)]],
+          notable: { name: "Arcane Focus", mods: [INC("spell", 30), L("mana", 30)] },
+          tail: [[INC("spell", 15)], [INC("manaRegen", 25)]],
           keystone: "blood_price"
         },
         {
-          smalls: [[INC("manaRegen", 15)], [INC("elemental", 10)], [INC("manaRegen", 15)]],
-          notable: { name: "Wellspring", mods: [INC("manaRegen", 40), L("mana", 20)] }
+          smalls: [[INC("lightning", 15)], [L("shockChance", 8)], [INC("cold", 15)]],
+          notable: { name: "Storm and Frost", mods: [INC("shock", 50), INC("chill", 40), L("shockChance", 8)] }
         },
         {
-          smalls: [[L("fireRes", 8)], [L("coldRes", 8)], [L("lightningRes", 8)]],
+          smalls: [[L("fireRes", 10)], [L("lightningRes", 10)], [L("coldRes", 10)]],
           notable: { name: "Elemental Ward", mods: [L("fireRes", 12), L("coldRes", 12), L("lightningRes", 12)] },
-          tail: [[INC("elemental", 10)], [L("fireRes", 6)]],
+          tail: [[L("fireRes", 10)], [L("lightningRes", 10)]],
           keystone: "bulwark"
         }
       ]
@@ -1125,6 +1171,46 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     refundPerLevels: 4
   };
 
+  // src/data/ailments.js
+  var AILMENTS = {
+    // Fire: burning damage over time. Strongest against big, long-lived targets (bosses).
+    ignite: {
+      name: "Burning",
+      from: "fire",
+      baseChance: 10,
+      duration: 4,
+      // Burn per second, as a share of the fire damage the hit dealt.
+      dpsPct: 0.3
+    },
+    // Lightning: the target takes more damage from everything.
+    shock: {
+      name: "Shocked",
+      from: "lightning",
+      baseChance: 10,
+      duration: 4,
+      effect: 25
+      // % increased damage taken
+    },
+    // Cold: the target attacks slower. Defence through offence.
+    chill: {
+      name: "Chilled",
+      from: "cold",
+      baseChance: 100,
+      duration: 3,
+      slow: 30
+      // % slower attacks
+    },
+    // Physical: a hit dealing at least `threshold` of the target's max life stuns it,
+    // pausing its attacks. Bosses need `bossMult` times as much.
+    stun: {
+      name: "Stunned",
+      from: "physical",
+      threshold: 0.15,
+      duration: 0.8,
+      bossMult: 3
+    }
+  };
+
   // src/rng.js
   function createRng(seed) {
     let s = seed >>> 0;
@@ -1177,6 +1263,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       if (!node) continue;
       for (const m of node.mods) mods.push({ ...m, source: `Passive: ${node.name}` });
     }
+    const sk = SKILLS[character.skill && character.skill.id || "cleave"];
+    for (const m of sk.mods || []) mods.push({ ...m, source: `Skill: ${sk.name}` });
     for (const id of character.skill && character.skill.supports || []) {
       const sup = SUPPORTS[id];
       for (const m of sup.mods) mods.push({ ...m, source: `Support: ${sup.name}` });
@@ -1286,7 +1374,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     const convert2 = Math.min(100, flat("convertPhysToFire") + flat("convertAllToFire")) / 100;
     const typed = {};
     if (skill.damageType === "physical") {
-      typed.physical = [baseMin * (1 - convert2), baseMax * (1 - convert2)];
+      if (convert2 < 1) typed.physical = [baseMin * (1 - convert2), baseMax * (1 - convert2)];
       if (convert2 > 0) typed.fire = [baseMin * convert2, baseMax * convert2, "physical"];
     } else {
       const allFire = flat("convertAllToFire") >= 100 && skill.damageType !== "fire";
@@ -1331,6 +1419,18 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     const lifeCost = flat("lifeCost") > 0;
     const leech = flat("leech");
     const lowLifeMore = flat("lowLifeMore");
+    const types = new Set(parts.map((p) => p.type));
+    const ailments = {
+      igniteChance: types.has("fire") ? Math.min(100, AILMENTS.ignite.baseChance + flat("igniteChance")) : 0,
+      igniteDpsPct: AILMENTS.ignite.dpsPct * (1 + inc("ignite") / 100),
+      shockChance: types.has("lightning") ? Math.min(100, AILMENTS.shock.baseChance + flat("shockChance")) : 0,
+      shockEffect: AILMENTS.shock.effect * (1 + inc("shock") / 100),
+      chillChance: types.has("cold") ? Math.min(100, AILMENTS.chill.baseChance + flat("chillChance")) : 0,
+      chillSlow: Math.min(60, AILMENTS.chill.slow * (1 + inc("chill") / 100)),
+      stunThreshold: types.has("physical") ? AILMENTS.stun.threshold / (1 + inc("stun") / 100) : 0
+    };
+    const penetration = flat("penetration");
+    const firePenetration = flat("firePenetration");
     return {
       level: character.level,
       life,
@@ -1372,7 +1472,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         manaPerSecond: manaCost * aps,
         lifeCost,
         leech,
-        lowLifeMore
+        lowLifeMore,
+        ailments,
+        penetration,
+        firePenetration
       },
       sources: {
         life: sources("life"),
@@ -1392,6 +1495,15 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         critChance: sources("critChance"),
         attack: sources("attack"),
         spell: sources("spell"),
+        cold: sources("cold"),
+        lightning: sources("lightning"),
+        ignite: sources("ignite"),
+        shock: sources("shock"),
+        chill: sources("chill"),
+        stun: sources("stun"),
+        igniteChance: sources("igniteChance"),
+        shockChance: sources("shockChance"),
+        penetration: sources("penetration"),
         elemental: sources("elemental"),
         fire: sources("fire"),
         damage: sources("damage"),
@@ -1399,6 +1511,22 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         targets: sources("targets")
       }
     };
+  }
+  function monsterRes(damage, monsterResMap, type) {
+    const raw = monsterResMap && monsterResMap[type] || 0;
+    if (type === "physical" || type === "chaos") return raw;
+    const pen = damage.penetration + (type === "fire" ? damage.firePenetration : 0);
+    return raw - pen;
+  }
+  function damageFactorVs(damage, monsterResMap) {
+    let total = 0;
+    let after = 0;
+    for (const p of damage.parts) {
+      const avg = (p.hitMin + p.hitMax) / 2;
+      total += avg;
+      after += avg * (1 - monsterRes(damage, monsterResMap, p.type) / 100);
+    }
+    return total > 0 ? after / total : 1;
   }
 
   // src/combat.js
@@ -1457,6 +1585,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     if (isBoss) {
       m.bigHit = { ...T2.bigHit, timer: T2.bigHit.interval, warned: false };
     }
+    m.res = { ...T2.res || {} };
+    if (threatId === "caster" && T2.ownElementRes) m.res[damageType] = T2.ownElementRes;
+    if (isBoss && zone.boss.res) m.res = { ...zone.boss.res };
+    m.status = {};
     return m;
   }
   function makePack(rng2, zone, nextId) {
@@ -1885,7 +2017,11 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     }
     for (const m of run.pack.monsters) {
       if (m.life <= 0) continue;
-      m.attackTimer -= DT;
+      tickAilments(state2, m);
+      if (m.life <= 0) continue;
+      if (m.status.stun) continue;
+      const pace = m.status.chill ? 1 - m.status.chill.slow / 100 : 1;
+      m.attackTimer -= DT * pace;
       if (m.attackTimer <= 0) {
         monsterHit(state2, s, m, 1);
         m.attackTimer += m.interval;
@@ -1893,7 +2029,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       }
       if (m.bigHit) {
         const b = m.bigHit;
-        b.timer -= DT;
+        b.timer -= DT * pace;
         if (!b.warned && b.timer <= b.windup) {
           b.warned = true;
           log(state2, "boss", `${m.name} winds up a heavy blow\u2026`);
@@ -1906,27 +2042,76 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         }
       }
     }
+    if (run.pack.monsters.every((m) => m.life <= 0)) {
+      packCleared(state2);
+      return;
+    }
     regen(state2, DT);
+  }
+  function tickAilments(state2, m) {
+    const st = m.status;
+    if (st.ignite) {
+      const dmg = st.ignite.dps * DT;
+      m.life -= dmg;
+      state2.run.record.igniteDamage = (state2.run.record.igniteDamage || 0) + dmg;
+      if (m.life <= 0) monsterKilled(state2, m);
+    }
+    for (const k of Object.keys(st)) {
+      st[k].time -= DT;
+      if (st[k].time <= 0) delete st[k];
+    }
   }
   function playerAttack(state2, s) {
     const r = rng(state2);
     const d = s.damage;
+    const A = d.ailments;
     const alive = state2.run.pack.monsters.filter((m) => m.life > 0);
     const main = alive.slice(0, d.targets);
     const splashed = alive.slice(d.targets, d.targets + d.splash);
     const lowLife = d.lowLifeMore > 0 && state2.player.life < s.life * 0.35 ? 1 + d.lowLifeMore / 100 : 1;
-    const parts = [];
+    const shown = [];
+    const applied = /* @__PURE__ */ new Set();
     let dealt = 0;
     const strike = (m, mult) => {
-      let dmg = r.range(d.hitMin, d.hitMax) * mult * lowLife;
+      const roll = r.next();
       const crit = r.chance(d.critChance / 100);
-      if (crit) dmg *= d.critMulti;
-      dmg = Math.max(1, Math.round(dmg));
-      const applied = Math.min(dmg, Math.max(0, m.life));
-      m.life -= dmg;
-      dealt += applied;
-      parts.push(crit ? `${dmg}!` : `${dmg}`);
-      if (m.life <= 0) monsterKilled(state2, m);
+      const shock = m.status.shock ? 1 + m.status.shock.effect / 100 : 1;
+      const base = mult * lowLife * (crit ? d.critMulti : 1) * shock;
+      const byType = {};
+      let total = 0;
+      for (const p of d.parts) {
+        const amt = (p.hitMin + roll * (p.hitMax - p.hitMin)) * base * (1 - monsterRes(d, m.res, p.type) / 100);
+        byType[p.type] = (byType[p.type] || 0) + amt;
+        total += amt;
+      }
+      total = Math.max(1, Math.round(total));
+      dealt += Math.min(total, Math.max(0, m.life));
+      m.life -= total;
+      shown.push(crit ? `${total}!` : `${total}`);
+      if (m.life <= 0) {
+        monsterKilled(state2, m);
+        return;
+      }
+      if (byType.fire && r.chance(A.igniteChance / 100)) {
+        const dps = byType.fire * A.igniteDpsPct;
+        if (!m.status.ignite || m.status.ignite.dps < dps) m.status.ignite = { dps, time: AILMENTS.ignite.duration };
+        applied.add("ignites");
+      }
+      if (byType.lightning && r.chance(A.shockChance / 100)) {
+        m.status.shock = { effect: A.shockEffect, time: AILMENTS.shock.duration };
+        applied.add("shocks");
+      }
+      if (byType.cold && r.chance(A.chillChance / 100)) {
+        m.status.chill = { slow: A.chillSlow, time: AILMENTS.chill.duration };
+        applied.add("chills");
+      }
+      if (byType.physical && A.stunThreshold > 0) {
+        const need = A.stunThreshold * (m.isBoss ? AILMENTS.stun.bossMult : 1) * m.maxLife;
+        if (byType.physical >= need) {
+          m.status.stun = { time: AILMENTS.stun.duration };
+          applied.add("stuns");
+        }
+      }
     };
     for (const m of main) strike(m, 1);
     for (const m of splashed) strike(m, d.splashMult);
@@ -1934,7 +2119,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       state2.player.life = Math.min(s.life, state2.player.life + dealt * (d.leech / 100));
     }
     const n = main.length + splashed.length;
-    log(state2, "hit", `${s.skill.name} hits ${n} for ${parts.join(", ")}${lowLife > 1 ? " (Last Stand)" : ""}`);
+    const extra = applied.size ? ` \xB7 ${[...applied].join(", ")}` : "";
+    log(state2, "hit", `${s.skill.name} hits ${n} for ${shown.join(", ")}${extra}`);
   }
   function monsterHit(state2, s, m, mult, isBig = false) {
     var _a;
@@ -2476,6 +2662,24 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         lookAt: bossDeaths > 0 ? "Single-target damage, max hit taken" : "Single-target damage"
       });
     }
+    const struggling = deaths.length > 0 || causes.some((c) => c.state === "Slow" || c.state === "Stuck on boss");
+    if (zone && struggling) {
+      let worst2 = null;
+      for (const { label, res, plural } of zoneResistances(zone)) {
+        const f = damageFactorVs(stats.damage, res);
+        if (f <= 0.75 && (!worst2 || f < worst2.f)) worst2 = { label, res, f, plural };
+      }
+      if (worst2) {
+        const types = Object.entries(worst2.res).filter(([, v]) => v > 0).map(([t, v]) => `${v}% ${t}`).join(" and ");
+        const yours = stats.damage.parts.map((p) => p.type).join(" and ");
+        causes.push({
+          state: "Resisted",
+          score: 35 + (1 - worst2.f) * 80,
+          message: `${worst2.label} ${worst2.plural ? "resist" : "resists"} ${types} damage. Your ${yours} hits deal ${fmt((1 - worst2.f) * 100)}% less to them.`,
+          lookAt: "Penetration, converting your damage, or a skill of another element"
+        });
+      }
+    }
     causes.sort((a, b) => b.score - a.score);
     const primary = causes[0] || null;
     const rest = causes.slice(1).filter((c) => !(primary && primary.state === "Dying" && c.state === "Fragile" && c.damageType === primary.damageType));
@@ -2485,6 +2689,17 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       secondary: rest.slice(0, 2),
       runsConsidered: runs.length
     };
+  }
+  function zoneResistances(zone) {
+    const out = [];
+    for (const m of zone.mix) {
+      const T2 = THREATS[m.threat];
+      const res = { ...T2.res || {} };
+      if (m.threat === "caster" && T2.ownElementRes) res[m.element] = T2.ownElementRes;
+      if (Object.keys(res).length) out.push({ label: m.threat === "caster" ? `${cap(m.element)} Casters` : `${T2.name}s`, res, plural: true });
+    }
+    if (zone.boss.res) out.push({ label: zone.boss.name, res: zone.boss.res, plural: false });
+    return out;
   }
 
   // src/ui/format.js
@@ -2533,7 +2748,14 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     attackSpeed: "Attack Speed",
     castSpeed: "Cast Speed",
     critChance: "Critical Strike Chance",
-    manaRegen: "Mana Regeneration Rate"
+    manaRegen: "Mana Regeneration Rate",
+    fire: "Fire Damage",
+    cold: "Cold Damage",
+    lightning: "Lightning Damage",
+    ignite: "Burning Damage",
+    shock: "Shock effect",
+    chill: "Chill effect",
+    stun: "Stun buildup"
   };
   function statModText(m) {
     const v = m.value;
@@ -2552,6 +2774,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         return `+${v}% to Cold Resistance`;
       case "lightningRes":
         return `+${v}% to Lightning Resistance`;
+      case "igniteChance":
+        return `+${v}% chance to ignite with fire damage`;
+      case "shockChance":
+        return `+${v}% chance to shock with lightning damage`;
       default:
         return `+${v} to ${STAT_NAMES[m.stat] || m.stat}`;
     }
@@ -2568,10 +2794,32 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     const total = zone.mix.reduce((a, m) => a + m.weight, 0);
     return zone.mix.map((m) => ({ ...m, share: m.weight / total * 100 }));
   }
+  function resText(res) {
+    const list = Object.entries(res || {}).filter(([, v]) => v > 0);
+    return list.length ? ` \xB7 resists ${list.map(([t, v]) => `<span class="dt-${t}">${t} ${v}%</span>`).join(", ")}` : "";
+  }
   function threatChip(m) {
     const T2 = THREATS[m.threat];
     const type = m.threat === "caster" ? m.element : T2.damageType;
-    return `<span class="chip threat"><span class="dot dot-${type}"></span>${T2.name}${m.threat === "caster" ? ` (${m.element})` : ""} <span class="muted">${Math.round(m.share)}%</span></span>`;
+    const res = { ...T2.res || {} };
+    if (m.threat === "caster" && T2.ownElementRes) res[m.element] = T2.ownElementRes;
+    return `<span class="chip threat"><span class="dot dot-${type}"></span>${T2.name}${m.threat === "caster" ? ` (${m.element})` : ""} <span class="muted">${Math.round(m.share)}%${resText(res)}</span></span>`;
+  }
+  var STATUS = {
+    ignite: (s) => `<span class="st st-fire">Burning ${Math.round(s.dps)}/s</span>`,
+    shock: () => '<span class="st st-lightning">Shocked</span>',
+    chill: () => '<span class="st st-cold">Chilled</span>',
+    stun: () => '<span class="st st-physical">Stunned</span>'
+  };
+  function ailmentRows(d) {
+    const A = d.ailments;
+    const rows = [];
+    if (A.igniteChance) rows.push(`<div class="kv"><span class="dt-fire">Ignite chance</span><b>${Math.round(A.igniteChance)}% <span class="muted">(burns ${Math.round(A.igniteDpsPct * 100)}%/s)</span></b></div>`);
+    if (A.shockChance) rows.push(`<div class="kv"><span class="dt-lightning">Shock chance</span><b>${Math.round(A.shockChance)}% <span class="muted">(+${Math.round(A.shockEffect)}% taken)</span></b></div>`);
+    if (A.chillChance) rows.push(`<div class="kv"><span class="dt-cold">Chill chance</span><b>${Math.round(A.chillChance)}% <span class="muted">(${Math.round(A.chillSlow)}% slower)</span></b></div>`);
+    if (A.stunThreshold) rows.push(`<div class="kv"><span>Stuns on hits of</span><b>${Math.round(A.stunThreshold * 100)}% <span class="muted">of enemy life</span></b></div>`);
+    if (d.penetration || d.firePenetration) rows.push(`<div class="kv"><span>Penetration</span><b>${d.penetration}%${d.firePenetration ? ` <span class="muted">+${d.firePenetration}% fire</span>` : ""}</b></div>`);
+    return rows.join("");
   }
   function renderZones(state2) {
     return ZONES.map((z) => {
@@ -2608,8 +2856,9 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? "s" : ""}` : ""}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)}</b></div>
-    <div class="kv"><span>Attacks per second</span><b>${d.aps.toFixed(2)}</b></div>
+    <div class="kv"><span>${s.skill.kind === "attack" ? "Attacks" : "Casts"} per second</span><b>${d.aps.toFixed(2)}</b></div>
     <div class="kv"><span>Targets per use</span><b>${d.targets}${d.splash ? ` <span class="muted">+${d.splash} splash</span>` : ""}</b></div>
+    ${ailmentRows(d)}
     <div class="kv"><span>Crit chance / multiplier</span><b>${fmt1(d.critChance)}% / ${Math.round(d.critMulti * 100)}%</b></div>
     ${d.lifeCost ? `<div class="kv"><span>Life per use</span><b>${fmt1(d.manaCost)}</b></div>` : `<div class="kv"><span>Mana per second</span><b class="${d.manaPerSecond > s.manaRegen ? "low" : ""}">${fmt1(d.manaPerSecond)} <span class="muted">(regen ${fmt1(s.manaRegen)})</span></b></div>`}
     <h3>Defence</h3>
@@ -2636,9 +2885,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       monsters = `<div class="pack-head">${alive} of ${run.pack.monsters.length} alive</div>` + run.pack.monsters.map((m) => {
         const dead = m.life <= 0;
         const warn = m.bigHit && m.bigHit.warned ? '<span class="windup">Winding up a heavy blow</span>' : "";
+        const tags = dead ? "" : Object.entries(m.status || {}).map(([k, v]) => STATUS[k](v)).join("");
         return `<div class="mon ${dead ? "dead" : ""} r-${m.rarity}">
         <span class="mon-name"><span class="dot dot-${m.damageType}" title="${m.damageType} damage"></span>${esc(m.name)}</span>
-        ${bar("mlife", Math.max(0, m.life), m.maxLife, dead ? "dead" : `${fmt2(Math.max(0, m.life))}`)}${warn}</div>`;
+        <span class="mon-bar">${bar("mlife", Math.max(0, m.life), m.maxLife, dead ? "dead" : `${fmt2(Math.max(0, m.life))}`)}${tags ? `<span class="tags">${tags}</span>` : ""}</span>${warn}</div>`;
       }).join("");
     } else {
       monsters = `<div class="phase">${phase}</div>`;
@@ -2646,7 +2896,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     return `
     <div class="run-head">
       <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} \xB7 ${progress}</div></div>
-      <div class="mix">${mixShares(zone).map(threatChip).join("")}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}</span></div>
+      <div class="mix">${mixShares(zone).map(threatChip).join("")}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}<span class="muted">${resText(zone.boss.res)}</span></span></div>
     </div>
     <div class="monsters">${monsters}</div>`;
   }
@@ -2830,7 +3080,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   }
   function skillSummary(st) {
     const d = st.damage;
-    return `<div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
+    return `${ailmentRows(d)}<div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
     <div class="kv"><span>Targets</span><b>${d.targets}${d.splash ? ` +${d.splash} splash` : ""}</b></div>
     <div class="kv"><span>${d.lifeCost ? "Life" : "Mana"} per use</span><b>${fmt1(d.manaCost)}</b></div>`;
   }

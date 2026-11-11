@@ -46,6 +46,8 @@ const STAT_NAMES = {
   physical: 'Physical Damage', damage: 'Damage', attack: 'Attack Damage', spell: 'Spell Damage',
   elemental: 'Elemental Damage', attackSpeed: 'Attack Speed', castSpeed: 'Cast Speed',
   critChance: 'Critical Strike Chance', manaRegen: 'Mana Regeneration Rate',
+  fire: 'Fire Damage', cold: 'Cold Damage', lightning: 'Lightning Damage',
+  ignite: 'Burning Damage', shock: 'Shock effect', chill: 'Chill effect', stun: 'Stun buildup',
 };
 
 // Text for a stat modifier from the passive tree.
@@ -60,6 +62,8 @@ export function statModText(m) {
     case 'fireRes': return `+${v}% to Fire Resistance`;
     case 'coldRes': return `+${v}% to Cold Resistance`;
     case 'lightningRes': return `+${v}% to Lightning Resistance`;
+    case 'igniteChance': return `+${v}% chance to ignite with fire damage`;
+    case 'shockChance': return `+${v}% chance to shock with lightning damage`;
     default: return `+${v} to ${STAT_NAMES[m.stat] || m.stat}`;
   }
 }

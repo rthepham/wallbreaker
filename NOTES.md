@@ -5,7 +5,7 @@ drops/inventory/equipping, crafting, skills & supports, passive tree), plus extr
 all six currencies, salvage + the Smith, item comparison, browser save with migrations.
 
 ## Commands
-- `npm test` – 49 automated tests (formulas, crafting, skills, supports, passives, keystones, save/load, milestone criteria)
+- `npm test` – 56 automated tests (formulas, crafting, skills, supports, passives, keystones, save/load, milestone criteria)
 - `npm run balance -- 40 <seed> naive|smart` – headless bot plays 40 sim-minutes and reports per-zone deaths
 - `npm run build` – writes `dist/wallbreaker.html` (published page) and `dist/play-local.html`
 
@@ -24,15 +24,25 @@ all six currencies, salvage + the Smith, item comparison, browser save with migr
 | Caster hit | 1.0× | 1.5× | Zone 4 stays a fire wall with a full build |
 | Fireball / Arc base damage | 12–18 / 4–30 | 6–9 / 1–10 | Spells outclassed Cleave |
 | Spell growth per level | 1.09 | 1.065 | Outgrew weapons ~5× by level 20 |
-| Spell mana costs | 10 / 12 | 6 / 7 | Matches the mana regen change |
+| Spell mana costs | 10 / 12 | Fireball 4, Arc 5, Ice Nova 4.5 | Matches the mana regen change; Arc stays the hungry one |
 | 3rd / 4th link | zone 6 / map T1 | zone 3 / zone 5 | Prototype only has 5 zones |
-| Passive tree | ~150 nodes, 8 keystones | 58 nodes, 6 keystones | Prototype scope (Ember Heart, Hollow Vessel later) |
+| Passive tree | ~150 nodes, 8 keystones | 58 nodes, 6 keystones | Prototype scope |
+| Keystones | Steady Hand, Last Stand, Ember Heart… | Iron Hide, Ember Heart, Reckless Tempo, Spread Thin, Blood Price (+25% more dmg), Bulwark (+20% res) | Playtest: old ones didn't solve any wall you hit |
+| Ailments | not in doc | Fire ignites, lightning shocks, cold chills, heavy physical stuns | Playtest: skills felt identical |
+| Monster resistances | zone 8+ only | Brutes 30% phys, casters 40% own element, bosses per zone | Each skill hits a different wall |
+| New content | – | Ice Nova skill, Pierce support, lightning casters in zone 5 | Defensive cold build; an answer to resists |
 | Last Stand regen | disabled | disabled in fights only | Walking recovery still works |
 
-## Balance snapshot (bot with skills, supports and passives; 3 skills × 3 seeds)
+## Balance snapshot (older; before ailments/resists)
 Zones 1–2 by ~4–6 min, zone 3 by ~7–11 min, zone 4 (fire wall, 4–19 runs, nearly all
 deaths to fire) by 10–21 min, zone 5 by 16–32 min.
 `SKILL=fireball npm run balance -- 35 1 smart` to rerun one.
+
+## Per-skill walls (bot, after ailments/resists)
+Fireball: zone 4 (fire casters + fire-resistant boss), done ~18–21 min.
+Arc: zone 5 (lightning casters resist it), 33–50 tries.
+Ice Nova: zone 5 (low boss damage, lightning casters).
+Cleave: steadiest; Brutes resist it, Ember Heart / Searing Edge get around that.
 
 ## Next
 Prototype check (20 minutes of play), then M7: zones 6–10 with cold/lightning casters and Blight.

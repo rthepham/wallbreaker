@@ -8,9 +8,10 @@ import { BASES, SLOTS } from './data/items.js';
 import { CURRENCY_ORDER } from './data/currency.js';
 import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
 import { PASSIVES, PASSIVE_RULES } from './data/passives.js';
+import { AILMENTS } from './data/ailments.js';
 import { createRng } from './rng.js';
 import {
-  computeStats, armourReduction, evadeChance, effectiveRes, itemLabel, damageTaken,
+  computeStats, armourReduction, evadeChance, effectiveRes, itemLabel, damageTaken, monsterRes,
 } from './stats.js';
 import { makePack, makeBossPack } from './combat.js';
 import { makeItem, rollMonsterDrops } from './loot.js';
@@ -233,10 +234,15 @@ function fightTick(state) {
     return;
   }
 
-  // 2. Monsters attack on their own timers.
+  // 2. Ailments tick, then monsters attack on their own timers.
   for (const m of run.pack.monsters) {
     if (m.life <= 0) continue;
-    m.attackTimer -= DT;
+    tickAilments(state, m);
+    if (m.life <= 0) continue;
+    // Stunned monsters don't act. Chilled ones act slower.
+    if (m.status.stun) continue;
+    const pace = m.status.chill ? 1 - m.status.chill.slow / 100 : 1;
+    m.attackTimer -= DT * pace;
     if (m.attackTimer <= 0) {
       monsterHit(state, s, m, 1);
       m.attackTimer += m.interval;
@@ -244,7 +250,7 @@ function fightTick(state) {
     }
     if (m.bigHit) {
       const b = m.bigHit;
-      b.timer -= DT;
+      b.timer -= DT * pace;
       if (!b.warned && b.timer <= b.windup) {
         b.warned = true;
         log(state, 'boss', `${m.name} winds up a heavy blow…`);
@@ -258,29 +264,82 @@ function fightTick(state) {
     }
   }
 
+  if (run.pack.monsters.every((m) => m.life <= 0)) {
+    packCleared(state);
+    return;
+  }
+
   // 3. Regen.
   regen(state, DT);
+}
+
+function tickAilments(state, m) {
+  const st = m.status;
+  if (st.ignite) {
+    const dmg = st.ignite.dps * DT;
+    m.life -= dmg;
+    state.run.record.igniteDamage = (state.run.record.igniteDamage || 0) + dmg;
+    if (m.life <= 0) monsterKilled(state, m);
+  }
+  for (const k of Object.keys(st)) {
+    st[k].time -= DT;
+    if (st[k].time <= 0) delete st[k];
+  }
 }
 
 function playerAttack(state, s) {
   const r = rng(state);
   const d = s.damage;
+  const A = d.ailments;
   const alive = state.run.pack.monsters.filter((m) => m.life > 0);
   const main = alive.slice(0, d.targets);
   const splashed = alive.slice(d.targets, d.targets + d.splash);
   const lowLife = d.lowLifeMore > 0 && state.player.life < s.life * 0.35 ? 1 + d.lowLifeMore / 100 : 1;
-  const parts = [];
+  const shown = [];
+  const applied = new Set();
   let dealt = 0;
   const strike = (m, mult) => {
-    let dmg = r.range(d.hitMin, d.hitMax) * mult * lowLife;
+    const roll = r.next();
     const crit = r.chance(d.critChance / 100);
-    if (crit) dmg *= d.critMulti;
-    dmg = Math.max(1, Math.round(dmg));
-    const applied = Math.min(dmg, Math.max(0, m.life));
-    m.life -= dmg;
-    dealt += applied;
-    parts.push(crit ? `${dmg}!` : `${dmg}`);
-    if (m.life <= 0) monsterKilled(state, m);
+    const shock = m.status.shock ? 1 + m.status.shock.effect / 100 : 1;
+    const base = mult * lowLife * (crit ? d.critMulti : 1) * shock;
+    // Each damage type is reduced by the monster's resistance to it.
+    const byType = {};
+    let total = 0;
+    for (const p of d.parts) {
+      const amt = (p.hitMin + roll * (p.hitMax - p.hitMin)) * base * (1 - monsterRes(d, m.res, p.type) / 100);
+      byType[p.type] = (byType[p.type] || 0) + amt;
+      total += amt;
+    }
+    total = Math.max(1, Math.round(total));
+    dealt += Math.min(total, Math.max(0, m.life));
+    m.life -= total;
+    shown.push(crit ? `${total}!` : `${total}`);
+    if (m.life <= 0) {
+      monsterKilled(state, m);
+      return;
+    }
+    // Ailments.
+    if (byType.fire && r.chance(A.igniteChance / 100)) {
+      const dps = byType.fire * A.igniteDpsPct;
+      if (!m.status.ignite || m.status.ignite.dps < dps) m.status.ignite = { dps, time: AILMENTS.ignite.duration };
+      applied.add('ignites');
+    }
+    if (byType.lightning && r.chance(A.shockChance / 100)) {
+      m.status.shock = { effect: A.shockEffect, time: AILMENTS.shock.duration };
+      applied.add('shocks');
+    }
+    if (byType.cold && r.chance(A.chillChance / 100)) {
+      m.status.chill = { slow: A.chillSlow, time: AILMENTS.chill.duration };
+      applied.add('chills');
+    }
+    if (byType.physical && A.stunThreshold > 0) {
+      const need = A.stunThreshold * (m.isBoss ? AILMENTS.stun.bossMult : 1) * m.maxLife;
+      if (byType.physical >= need) {
+        m.status.stun = { time: AILMENTS.stun.duration };
+        applied.add('stuns');
+      }
+    }
   };
   for (const m of main) strike(m, 1);
   for (const m of splashed) strike(m, d.splashMult);
@@ -288,7 +347,8 @@ function playerAttack(state, s) {
     state.player.life = Math.min(s.life, state.player.life + dealt * (d.leech / 100));
   }
   const n = main.length + splashed.length;
-  log(state, 'hit', `${s.skill.name} hits ${n} for ${parts.join(', ')}${lowLife > 1 ? ' (Last Stand)' : ''}`);
+  const extra = applied.size ? ` · ${[...applied].join(', ')}` : '';
+  log(state, 'hit', `${s.skill.name} hits ${n} for ${shown.join(', ')}${extra}`);
 }
 
 function monsterHit(state, s, m, mult, isBig = false) {

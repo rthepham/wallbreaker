@@ -6,6 +6,7 @@ import { BASES, MODS, SLOT_NAMES } from './data/items.js';
 import { SKILLS, SUPPORTS } from './data/skills.js';
 import { zoneResPenalty } from './data/zones.js';
 import { PASSIVES } from './data/passives.js';
+import { AILMENTS } from './data/ailments.js';
 
 export const DAMAGE_TYPES = ['physical', 'fire', 'cold', 'lightning', 'chaos'];
 
@@ -24,6 +25,8 @@ export function collectModifiers(character) {
     if (!node) continue;
     for (const m of node.mods) mods.push({ ...m, source: `Passive: ${node.name}` });
   }
+  const sk = SKILLS[(character.skill && character.skill.id) || 'cleave'];
+  for (const m of sk.mods || []) mods.push({ ...m, source: `Skill: ${sk.name}` });
   for (const id of (character.skill && character.skill.supports) || []) {
     const sup = SUPPORTS[id];
     for (const m of sup.mods) mods.push({ ...m, source: `Support: ${sup.name}` });
@@ -150,7 +153,7 @@ export function computeStats(character) {
   const convert = Math.min(100, flat('convertPhysToFire') + flat('convertAllToFire')) / 100;
   const typed = {};
   if (skill.damageType === 'physical') {
-    typed.physical = [baseMin * (1 - convert), baseMax * (1 - convert)];
+    if (convert < 1) typed.physical = [baseMin * (1 - convert), baseMax * (1 - convert)];
     if (convert > 0) typed.fire = [baseMin * convert, baseMax * convert, 'physical'];
   } else {
     const allFire = flat('convertAllToFire') >= 100 && skill.damageType !== 'fire';
@@ -197,6 +200,19 @@ export function computeStats(character) {
   const lifeCost = flat('lifeCost') > 0;
   const leech = flat('leech');
   const lowLifeMore = flat('lowLifeMore');
+  // Ailments: what each damage type does to enemies.
+  const types = new Set(parts.map((p) => p.type));
+  const ailments = {
+    igniteChance: types.has('fire') ? Math.min(100, AILMENTS.ignite.baseChance + flat('igniteChance')) : 0,
+    igniteDpsPct: AILMENTS.ignite.dpsPct * (1 + inc('ignite') / 100),
+    shockChance: types.has('lightning') ? Math.min(100, AILMENTS.shock.baseChance + flat('shockChance')) : 0,
+    shockEffect: AILMENTS.shock.effect * (1 + inc('shock') / 100),
+    chillChance: types.has('cold') ? Math.min(100, AILMENTS.chill.baseChance + flat('chillChance')) : 0,
+    chillSlow: Math.min(60, AILMENTS.chill.slow * (1 + inc('chill') / 100)),
+    stunThreshold: types.has('physical') ? AILMENTS.stun.threshold / (1 + inc('stun') / 100) : 0,
+  };
+  const penetration = flat('penetration');
+  const firePenetration = flat('firePenetration');
 
   return {
     level: character.level,
@@ -207,6 +223,7 @@ export function computeStats(character) {
       baseMin, baseMax, added, parts, increased: mainPart.increased, moreMult: mainPart.more, hitMin, hitMax, avgHit,
       speedBase, speedInc, weaponAps: speedBase, aps, critChance, critMulti, critFactor, dps, targets,
       splash, splashMult, manaCost, manaMult, manaPerSecond: manaCost * aps, lifeCost, leech, lowLifeMore,
+      ailments, penetration, firePenetration,
     },
     sources: {
       life: sources('life'), mana: sources('mana'), armour: sources('armour'),
@@ -216,8 +233,30 @@ export function computeStats(character) {
       physical: sources('physical'), addedPhys: sources('addedPhys'),
       attackSpeed: sources('attackSpeed'), castSpeed: sources('castSpeed'), critChance: sources('critChance'),
       attack: sources('attack'),
-      spell: sources('spell'), elemental: sources('elemental'), fire: sources('fire'), damage: sources('damage'),
+      spell: sources('spell'), cold: sources('cold'), lightning: sources('lightning'),
+      ignite: sources('ignite'), shock: sources('shock'), chill: sources('chill'), stun: sources('stun'),
+      igniteChance: sources('igniteChance'), shockChance: sources('shockChance'), penetration: sources('penetration'), elemental: sources('elemental'), fire: sources('fire'), damage: sources('damage'),
       critMulti: sources('critMulti'), targets: sources('targets'),
     },
   };
+}
+
+// Resistance a monster has against one of your damage types, after your penetration.
+export function monsterRes(damage, monsterResMap, type) {
+  const raw = (monsterResMap && monsterResMap[type]) || 0;
+  if (type === 'physical' || type === 'chaos') return raw;
+  const pen = damage.penetration + (type === 'fire' ? damage.firePenetration : 0);
+  return raw - pen;
+}
+
+// Share of your hit damage a monster with these resistances takes (1 = all of it).
+export function damageFactorVs(damage, monsterResMap) {
+  let total = 0;
+  let after = 0;
+  for (const p of damage.parts) {
+    const avg = (p.hitMin + p.hitMax) / 2;
+    total += avg;
+    after += avg * (1 - monsterRes(damage, monsterResMap, p.type) / 100);
+  }
+  return total > 0 ? after / total : 1;
 }

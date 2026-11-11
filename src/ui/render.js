@@ -32,13 +32,38 @@ function mixShares(zone) {
   return zone.mix.map((m) => ({ ...m, share: (m.weight / total) * 100 }));
 }
 
+function resText(res) {
+  const list = Object.entries(res || {}).filter(([, v]) => v > 0);
+  return list.length ? ` · resists ${list.map(([t, v]) => `<span class="dt-${t}">${t} ${v}%</span>`).join(', ')}` : '';
+}
+
 function threatChip(m) {
   const T = THREATS[m.threat];
   const type = m.threat === 'caster' ? m.element : T.damageType;
-  return `<span class="chip threat"><span class="dot dot-${type}"></span>${T.name}${m.threat === 'caster' ? ` (${m.element})` : ''} <span class="muted">${Math.round(m.share)}%</span></span>`;
+  const res = { ...(T.res || {}) };
+  if (m.threat === 'caster' && T.ownElementRes) res[m.element] = T.ownElementRes;
+  return `<span class="chip threat"><span class="dot dot-${type}"></span>${T.name}${m.threat === 'caster' ? ` (${m.element})` : ''} <span class="muted">${Math.round(m.share)}%${resText(res)}</span></span>`;
 }
 
+const STATUS = {
+  ignite: (s) => `<span class="st st-fire">Burning ${Math.round(s.dps)}/s</span>`,
+  shock: () => '<span class="st st-lightning">Shocked</span>',
+  chill: () => '<span class="st st-cold">Chilled</span>',
+  stun: () => '<span class="st st-physical">Stunned</span>',
+};
+
 // ---------- Header: zones ----------
+
+export function ailmentRows(d) {
+  const A = d.ailments;
+  const rows = [];
+  if (A.igniteChance) rows.push(`<div class="kv"><span class="dt-fire">Ignite chance</span><b>${Math.round(A.igniteChance)}% <span class="muted">(burns ${Math.round(A.igniteDpsPct * 100)}%/s)</span></b></div>`);
+  if (A.shockChance) rows.push(`<div class="kv"><span class="dt-lightning">Shock chance</span><b>${Math.round(A.shockChance)}% <span class="muted">(+${Math.round(A.shockEffect)}% taken)</span></b></div>`);
+  if (A.chillChance) rows.push(`<div class="kv"><span class="dt-cold">Chill chance</span><b>${Math.round(A.chillChance)}% <span class="muted">(${Math.round(A.chillSlow)}% slower)</span></b></div>`);
+  if (A.stunThreshold) rows.push(`<div class="kv"><span>Stuns on hits of</span><b>${Math.round(A.stunThreshold * 100)}% <span class="muted">of enemy life</span></b></div>`);
+  if (d.penetration || d.firePenetration) rows.push(`<div class="kv"><span>Penetration</span><b>${d.penetration}%${d.firePenetration ? ` <span class="muted">+${d.firePenetration}% fire</span>` : ''}</b></div>`);
+  return rows.join('');
+}
 
 export function renderZones(state) {
   return ZONES.map((z) => {
@@ -78,8 +103,9 @@ export function renderVitals(state) {
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? 's' : ''}` : ''}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt(d.hitMin)}–${fmt(d.hitMax)}</b></div>
-    <div class="kv"><span>Attacks per second</span><b>${d.aps.toFixed(2)}</b></div>
+    <div class="kv"><span>${s.skill.kind === 'attack' ? 'Attacks' : 'Casts'} per second</span><b>${d.aps.toFixed(2)}</b></div>
     <div class="kv"><span>Targets per use</span><b>${d.targets}${d.splash ? ` <span class="muted">+${d.splash} splash</span>` : ''}</b></div>
+    ${ailmentRows(d)}
     <div class="kv"><span>Crit chance / multiplier</span><b>${fmt1(d.critChance)}% / ${Math.round(d.critMulti * 100)}%</b></div>
     ${d.lifeCost
       ? `<div class="kv"><span>Life per use</span><b>${fmt1(d.manaCost)}</b></div>`
@@ -111,9 +137,10 @@ export function renderRun(state) {
     monsters = `<div class="pack-head">${alive} of ${run.pack.monsters.length} alive</div>` + run.pack.monsters.map((m) => {
       const dead = m.life <= 0;
       const warn = m.bigHit && m.bigHit.warned ? '<span class="windup">Winding up a heavy blow</span>' : '';
+      const tags = dead ? '' : Object.entries(m.status || {}).map(([k, v]) => STATUS[k](v)).join('');
       return `<div class="mon ${dead ? 'dead' : ''} r-${m.rarity}">
         <span class="mon-name"><span class="dot dot-${m.damageType}" title="${m.damageType} damage"></span>${esc(m.name)}</span>
-        ${bar('mlife', Math.max(0, m.life), m.maxLife, dead ? 'dead' : `${fmt(Math.max(0, m.life))}`)}${warn}</div>`;
+        <span class="mon-bar">${bar('mlife', Math.max(0, m.life), m.maxLife, dead ? 'dead' : `${fmt(Math.max(0, m.life))}`)}${tags ? `<span class="tags">${tags}</span>` : ''}</span>${warn}</div>`;
     }).join('');
   } else {
     monsters = `<div class="phase">${phase}</div>`;
@@ -121,7 +148,7 @@ export function renderRun(state) {
   return `
     <div class="run-head">
       <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} · ${progress}</div></div>
-      <div class="mix">${mixShares(zone).map(threatChip).join('')}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}</span></div>
+      <div class="mix">${mixShares(zone).map(threatChip).join('')}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}<span class="muted">${resText(zone.boss.res)}</span></span></div>
     </div>
     <div class="monsters">${monsters}</div>`;
 }
@@ -333,7 +360,7 @@ export function renderSheet(state) {
 
 function skillSummary(st) {
   const d = st.damage;
-  return `<div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
+  return `${ailmentRows(d)}<div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
     <div class="kv"><span>Targets</span><b>${d.targets}${d.splash ? ` +${d.splash} splash` : ''}</b></div>
     <div class="kv"><span>${d.lifeCost ? 'Life' : 'Mana'} per use</span><b>${fmt1(d.manaCost)}</b></div>`;
 }

@@ -12,7 +12,7 @@ export const SKILLS = {
     manaCost: 4,
     targets: 3,
     tags: ['Attack', 'Melee', 'Area'],
-    description: 'A wide swing. Uses your weapon’s damage and speed. Hits 3 enemies.',
+    description: 'A wide swing that hits 3 enemies. Scales with your weapon. Heavy hits stun, pausing enemy attacks. Brutes shrug off some physical damage.',
   },
   fireball: {
     name: 'Fireball',
@@ -25,13 +25,15 @@ export const SKILLS = {
     castRate: 1.25,
     crit: 6,
     // DOC: doc says 10. Lowered with the mana regen change.
-    manaCost: 6,
+    manaCost: 4,
     targets: 1,
     splash: 2,
     splashMult: 0.5,
     damageMore: 1,
-    tags: ['Spell', 'Projectile'],
-    description: 'Hits one enemy hard, and splashes 2 more for half damage. Scales with your level.',
+    tags: ['Spell', 'Projectile', 'Fire'],
+    // Extra ignite chance on top of the base 10% for fire hits.
+    mods: [{ stat: 'igniteChance', kind: 'flat', value: 25 }],
+    description: 'Hits one enemy hard and splashes 2 more for half damage. Often sets enemies burning, which melts bosses. Fire casters resist it.',
   },
   arc: {
     name: 'Arc',
@@ -42,15 +44,31 @@ export const SKILLS = {
     growth: 1.065,
     castRate: 1.4,
     crit: 5,
-    manaCost: 7,
+    // Deliberately hungry: Arc's weakness is mana.
+    manaCost: 5,
     targets: 4,
     damageMore: 1,
-    tags: ['Spell', 'Chain'],
-    description: 'Chains between 4 enemies at full damage. Wide damage range. Scales with your level.',
+    tags: ['Spell', 'Chain', 'Lightning'],
+    mods: [{ stat: 'shockChance', kind: 'flat', value: 25 }],
+    description: 'Chains between 4 enemies at full damage. Often shocks them so they take more damage. Hungry for mana.',
+  },
+  ice_nova: {
+    name: 'Ice Nova',
+    kind: 'spell',
+    damageType: 'cold',
+    base: [3, 6],
+    growth: 1.065,
+    castRate: 1.1,
+    crit: 6,
+    manaCost: 4.5,
+    targets: 5,
+    damageMore: 1,
+    tags: ['Spell', 'Area', 'Cold'],
+    description: 'A ring of frost that hits 5 enemies. Every hit chills, so enemies attack 30% slower. Lower damage, safer fights. Nothing resists cold yet.',
   },
 };
 
-export const SKILL_ORDER = ['cleave', 'fireball', 'arc'];
+export const SKILL_ORDER = ['cleave', 'fireball', 'arc', 'ice_nova'];
 
 // Supports add modifiers to the linked skill and multiply its mana cost.
 // requires: the skill must have at least one of these tags (null = works with all).
@@ -85,6 +103,11 @@ export const SUPPORTS = {
     text: '25% more uses per second',
     mods: [{ stat: 'speed', kind: 'more', value: 25 }],
   },
+  pierce: {
+    name: 'Pierce', manaMult: 1.3, requires: ['Fire', 'Lightning', 'Cold'],
+    text: 'Hits ignore 25% of enemy elemental resistance',
+    mods: [{ stat: 'penetration', kind: 'flat', value: 25 }],
+  },
   focused_strike: {
     name: 'Focused Strike', manaMult: 1.4, requires: null,
     text: '60% more damage, but hits only one target',
@@ -92,7 +115,7 @@ export const SUPPORTS = {
   },
 };
 
-export const SUPPORT_ORDER = ['brutality', 'wide_arc', 'searing_edge', 'precision', 'bloodthirst', 'echo', 'focused_strike'];
+export const SUPPORT_ORDER = ['brutality', 'wide_arc', 'searing_edge', 'precision', 'bloodthirst', 'echo', 'pierce', 'focused_strike'];
 
 export const LINKS = {
   base: 2,

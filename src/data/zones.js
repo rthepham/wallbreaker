@@ -30,7 +30,7 @@ export const ZONES = [
       { threat: 'swarm', weight: 2 },
       { threat: 'brute', weight: 3 },
     ],
-    boss: { name: 'Foreman Gath', damageType: 'physical' },
+    boss: { name: 'Foreman Gath', damageType: 'physical', res: { physical: 30 } },
     targetPackSeconds: 6,
   },
   {
@@ -43,7 +43,7 @@ export const ZONES = [
       { threat: 'brute', weight: 0.5 },
       { threat: 'caster', element: 'fire', weight: 3 },
     ],
-    boss: { name: 'The Pyre Warden', damageType: 'fire' },
+    boss: { name: 'The Pyre Warden', damageType: 'fire', res: { fire: 40 } },
     targetPackSeconds: 6,
   },
   {
@@ -54,9 +54,10 @@ export const ZONES = [
     mix: [
       { threat: 'swarm', weight: 1 },
       { threat: 'brute', weight: 1.5 },
-      { threat: 'caster', element: 'fire', weight: 2 },
+      { threat: 'caster', element: 'fire', weight: 1 },
+      { threat: 'caster', element: 'lightning', weight: 1.5 },
     ],
-    boss: { name: 'Ashborn Colossus', damageType: 'physical' },
+    boss: { name: 'Ashborn Colossus', damageType: 'physical', res: { physical: 30, fire: 30 } },
     targetPackSeconds: 6,
   },
 ];

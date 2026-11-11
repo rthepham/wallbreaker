@@ -6,7 +6,7 @@
 
 import { THREATS } from './data/monsters.js';
 import { ZONES } from './data/zones.js';
-import { effectiveRes, evadeChance } from './stats.js';
+import { effectiveRes, evadeChance, damageFactorVs } from './stats.js';
 import { RECENT_SECONDS } from './game.js';
 
 const WINDOW_RUNS = 5;
@@ -175,6 +175,27 @@ export function diagnose(state, stats) {
     });
   }
 
+  // Resisted: a threat in this zone shrugs off a big share of your damage.
+  // Only reported when something is actually going wrong here.
+  const struggling = deaths.length > 0 || causes.some((c) => c.state === 'Slow' || c.state === 'Stuck on boss');
+  if (zone && struggling) {
+    let worst = null;
+    for (const { label, res, plural } of zoneResistances(zone)) {
+      const f = damageFactorVs(stats.damage, res);
+      if (f <= 0.75 && (!worst || f < worst.f)) worst = { label, res, f, plural };
+    }
+    if (worst) {
+      const types = Object.entries(worst.res).filter(([, v]) => v > 0).map(([t, v]) => `${v}% ${t}`).join(' and ');
+      const yours = stats.damage.parts.map((p) => p.type).join(' and ');
+      causes.push({
+        state: 'Resisted',
+        score: 35 + (1 - worst.f) * 80,
+        message: `${worst.label} ${worst.plural ? 'resist' : 'resists'} ${types} damage. Your ${yours} hits deal ${fmt((1 - worst.f) * 100)}% less to them.`,
+        lookAt: 'Penetration, converting your damage, or a skill of another element',
+      });
+    }
+  }
+
   causes.sort((a, b) => b.score - a.score);
   // Drop a Fragile that repeats the primary Dying cause's damage type.
   const primary = causes[0] || null;
@@ -185,4 +206,17 @@ export function diagnose(state, stats) {
     secondary: rest.slice(0, 2),
     runsConsidered: runs.length,
   };
+}
+
+// Who in this zone resists what.
+export function zoneResistances(zone) {
+  const out = [];
+  for (const m of zone.mix) {
+    const T = THREATS[m.threat];
+    const res = { ...(T.res || {}) };
+    if (m.threat === 'caster' && T.ownElementRes) res[m.element] = T.ownElementRes;
+    if (Object.keys(res).length) out.push({ label: m.threat === 'caster' ? `${cap(m.element)} Casters` : `${T.name}s`, res, plural: true });
+  }
+  if (zone.boss.res) out.push({ label: zone.boss.name, res: zone.boss.res, plural: false });
+  return out;
 }

@@ -24,7 +24,9 @@ function score(s) {
   const d = s.damage;
   const reach = d.targets + d.splash * d.splashMult;
   const sustain = d.lifeCost ? 1 : Math.min(1, (s.manaRegen * 1.15) / d.manaPerSecond);
-  return d.dps * sustain * reach ** 0.5 * ehp * fire;
+  const A = d.ailments;
+  const ail = 1 + (A.igniteChance / 100) * A.igniteDpsPct * 2 + (A.shockChance / 100) * (A.shockEffect / 100) + (A.chillChance / 100) * (A.chillSlow / 100);
+  return d.dps * ail * sustain * reach ** 0.5 * ehp * fire;
 }
 
 // Try every combination of owned, fitting supports and keep the best.

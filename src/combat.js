@@ -59,6 +59,12 @@ export function makeMonster(rng, id, { zone, threatId, element, rarity = 'normal
   if (isBoss) {
     m.bigHit = { ...T.bigHit, timer: T.bigHit.interval, warned: false };
   }
+  // Resistances (percent) by damage type.
+  m.res = { ...(T.res || {}) };
+  if (threatId === 'caster' && T.ownElementRes) m.res[damageType] = T.ownElementRes;
+  if (isBoss && zone.boss.res) m.res = { ...zone.boss.res };
+  // Active ailments: { ignite, shock, chill, stun } with remaining time.
+  m.status = {};
   return m;
 }
 

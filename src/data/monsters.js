@@ -47,6 +47,8 @@ export const THREATS = {
     interval: 2.0,
     hitMult: 2.5,
     lifeMult: 1.2,
+    // Thick hide: physical hits deal less. Tests attack builds.
+    res: { physical: 30 },
     xpMult: 1.4,
     dropMult: 1.2,
     names: ['Quarry Ogre', 'Slagback', 'Hollow Brute', 'Stonejaw'],
@@ -57,6 +59,8 @@ export const THREATS = {
     damageType: 'fire',
     interval: 1.0,
     hitMult: 1.5,
+    // Casters resist their own element.
+    ownElementRes: 40,
     lifeMult: 0.8,
     xpMult: 1.1,
     dropMult: 1,

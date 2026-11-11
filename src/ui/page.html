@@ -136,6 +136,12 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .mon { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 0.85rem; }
 .mon-name { display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .mon.dead { opacity: 0.35; }
+.mon-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.mon-bar .bar { flex: 1; min-width: 40px; }
+.tags { display: flex; gap: 3px; flex: none; }
+.st { font-size: 0.68rem; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.st-fire { color: var(--t-fire); } .st-lightning { color: var(--t-lightning); } .st-cold { color: var(--t-cold); } .st-physical { color: var(--t-physical); }
+.dt-physical { color: var(--t-physical); }
 .mon.r-magic .mon-name { color: var(--r-magic); }
 .mon.r-rare .mon-name { color: var(--r-rare); }
 .mon.r-boss .mon-name { color: var(--r-boss); font-weight: 600; }
@@ -353,6 +359,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <h3>The loop</h3>
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
+          <li><b>Damage types matter.</b> Fire sets enemies burning (great on bosses). Lightning shocks them so they take more damage. Cold chills them so they attack slower. Heavy physical hits stun. Some enemies resist a type: Brutes shrug off physical, casters resist their own element. The zone header shows who resists what.</li>
           <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
           <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>
         </ul>
