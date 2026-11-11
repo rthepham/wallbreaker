@@ -1,11 +1,18 @@
 # Wallbreaker – prototype notes
 
-Built: milestones M0–M6 (stat sheet, auto-combat, fire casters + death + Diagnosis,
-drops/inventory/equipping, crafting, skills & supports, passive tree), plus extras:
-all six currencies, salvage + the Smith, item comparison, browser save with migrations.
+Built: milestones M0–M12 in prototype form.
+- Zones 1–10 (Swarm, Brute, fire/cold/lightning Casters, Blight), resistance penalty from zone 6.
+- 8 gear slots, 7 item types, wands, ~30 mod families; inventory filters, sort, search, change chips.
+- 4 skills, 9 supports, element effects (ignite, shock, chill, stun), monster resistances.
+- Passive tree: 139 nodes, 9 keystones, region bridges, zoom/pan.
+- Maps: 16 tiers, 5 layouts, 6 map mods, map crafting, sustain, map runner.
+- Offline progress (50%, 8h cap), save export/import.
+- Automation: auto-salvage, loot filter, map runner, craft rules, upgrade advisor.
+- Leagues: reset with Legacy points, 6 Legacy upgrades, 12 challenges, heirlooms,
+  4 rotating mechanics (Shards, Rifts, Bounties, Echoes).
 
 ## Commands
-- `npm test` – 56 automated tests (formulas, crafting, skills, supports, passives, keystones, save/load, milestone criteria)
+- `npm test` – 86 automated tests (formulas, crafting, skills, supports, passives, keystones, save/load, milestone criteria)
 - `npm run balance -- 40 <seed> naive|smart` – headless bot plays 40 sim-minutes and reports per-zone deaths
 - `npm run build` – writes `dist/wallbreaker.html` (published page) and `dist/play-local.html`
 
@@ -20,7 +27,14 @@ all six currencies, salvage + the Smith, item comparison, browser save with migr
 | Swarm hit / interval | 0.5× / – | 0.35× / 1.8s | 15 attackers out-damaged every other threat |
 | Brute life | – | 1.2× | Brute packs were too tanky for early DPS |
 | Zone monster levels | ~5/zone | 1, 4, 8, 13, 18 | Smoother early curve |
-| Monster life / hit growth per level | 1.11 / 1.075 | 1.14 / 1.10 | Keeps walls after supports + passives |
+| Monster life / hit growth per level | 1.11 / 1.075 | 1.14 / 1.08 (damage scale 0.46) | Keeps walls after supports + passives without zone 8+ one-shotting |
+| Zone levels 6–10 | ~5/zone to 50 | 23, 28, 33, 38, 42 | Pacing |
+| Chaos res tiers | from ilvl 40 | from ilvl 22 | Blight arrives in zone 7 |
+| Map level | 52 + 2×tier | 40 + 2×tier | Tier 1 matches zone 10 |
+| Map resistance penalty | −40% | −30% | Keeps the cap reachable |
+| Link slots | 3rd zone 6, 4th map T1, 5th map T8 | zone 3 / 5 / 8 | Earlier build depth |
+| Inventory | – | 120 slots | 8 slots of drops |
+| Offline XP | – | applies the over-level penalty per run | Prevented +13 levels from farming zone 2 |
 | Caster hit | 1.0× | 1.5× | Zone 4 stays a fire wall with a full build |
 | Fireball / Arc base damage | 12–18 / 4–30 | 6–9 / 1–10 | Spells outclassed Cleave |
 | Spell growth per level | 1.09 | 1.065 | Outgrew weapons ~5× by level 20 |
@@ -44,5 +58,10 @@ Arc: zone 5 (lightning casters resist it), 33–50 tries.
 Ice Nova: zone 5 (low boss damage, lightning casters).
 Cleave: steadiest; Brutes resist it, Ember Heart / Searing Edge get around that.
 
+## Bot pacing (latest)
+Zone 10 reached in 60–120 min for all skills; first clear ~135 min (Cleave) to ~230 min (Fireball).
+Maps: tier 1–2 sustain well (56/66 cleared), but the bot climbs tiers slowly. Tier pacing needs human play.
+
 ## Next
-Prototype check (20 minutes of play), then M7: zones 6–10 with cold/lightning casters and Blight.
+Human playtest. Known gaps: tree is ~139 nodes (doc ~150), no start-region choice, no Atlas,
+Hollow Vessel / energy shield not built, map tier pacing unverified past tier 2.
