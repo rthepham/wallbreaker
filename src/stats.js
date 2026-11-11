@@ -4,7 +4,7 @@
 import { PLAYER } from './data/player.js';
 import { BASES, MODS, SLOT_NAMES } from './data/items.js';
 import { SKILLS, SUPPORTS } from './data/skills.js';
-import { zoneResPenalty } from './data/zones.js';
+import { zoneResPenalty, zoneMaxResMinus } from './data/zones.js';
 import { PASSIVES } from './data/passives.js';
 import { AILMENTS } from './data/ailments.js';
 
@@ -74,7 +74,8 @@ export function effectiveRes(stats, type, zoneId) {
   if (type === 'physical') return 0;
   const raw = stats.res[type];
   const penalty = type === 'chaos' ? 0 : zoneResPenalty(zoneId);
-  return Math.min(raw - penalty, stats.maxRes[type]);
+  const maxMinus = zoneMaxResMinus(zoneId);
+  return Math.min(raw - penalty, stats.maxRes[type] - maxMinus);
 }
 
 // Damage actually taken from one hit of the given type.

@@ -2,6 +2,7 @@
 export const AUTOMATION = {
   autoSalvage: { name: 'Auto-salvage', zone: 3, text: 'Salvages Normal items as they drop.' },
   lootFilter: { name: 'Loot filter', zone: 8, text: 'Salvages Magic and Rare items that have none of the mods you choose to keep.' },
+  mapRunner: { name: 'Map runner', mapTier: 4, text: 'Runs maps from your stash automatically, one after another.' },
 };
 
 export const DEFAULT_AUTOMATION = {

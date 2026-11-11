@@ -316,6 +316,11 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
 .fam-group { border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 10px; margin: 0; font-size: 0.85rem; }
 .fam-group legend { color: var(--brass); font-family: var(--f-display); padding: 0 4px; }
 .type-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; }
+.tier-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.tier-cell { position: relative; text-align: center; font-family: var(--f-mono); font-size: 0.85rem; padding: 6px 0; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); }
+.tier-cell.done { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.tier-cell i { position: absolute; top: 0; right: 2px; font-size: 0.6rem; font-style: normal; }
+.runner { display: grid; gap: 4px; margin: 8px 0; }
 .danger { background: #8c2f25; border-color: #c2493b; color: #fff4ee; }
 
 @media (max-width: 1100px) {
@@ -363,6 +368,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <button role="tab" data-action="tab" data-tab="gear" aria-selected="true">Gear &amp; crafting</button>
       <button role="tab" data-action="tab" data-tab="skills" aria-selected="false">Skills</button>
       <button role="tab" data-action="tab" data-tab="tree" aria-selected="false">Passive tree <span id="tree-count" class="count-badge"></span></button>
+      <button role="tab" data-action="tab" data-tab="maps" aria-selected="false">Maps</button>
       <button role="tab" data-action="tab" data-tab="auto" aria-selected="false">Automation</button>
       <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
       <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
@@ -371,6 +377,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <div data-panel="gear" id="gear" role="tabpanel"></div>
     <div data-panel="skills" id="skills" role="tabpanel" hidden></div>
     <div data-panel="tree" id="tree" role="tabpanel" hidden></div>
+    <div data-panel="maps" id="maps" role="tabpanel" hidden></div>
     <div data-panel="auto" id="auto" role="tabpanel" hidden></div>
     <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
     <div data-panel="help" role="tabpanel" hidden>

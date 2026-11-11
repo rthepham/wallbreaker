@@ -10,6 +10,8 @@ import {
   passivePoints, passivesSpent, canAllocate, canRefund, refundCost, statsWithPassives, automationUnlocked,
 } from '../game.js';
 import { AUTOMATION } from '../data/automation.js';
+import { MAP_RULES, MAP_LAYOUTS, MAP_MODS } from '../data/maps.js';
+import { mapLevel, mapIiq, canCraftMap } from '../maps.js';
 import { PASSIVES, PASSIVE_REGIONS } from '../data/passives.js';
 import { SKILLS, SKILL_ORDER, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from '../data/skills.js';
 import { maxHitTaken, effectiveRes, DAMAGE_TYPES } from '../stats.js';
@@ -83,17 +85,18 @@ export function renderZones(state) {
 // ---------- Character (live) ----------
 
 export function renderVitals(state) {
+  const area = state.run.zoneId;
   const s = getStats(state);
   const ch = state.character;
   const p = state.player;
   const need = xpToNext(ch.level);
   const d = s.damage;
-  const zone = getZone(state.zoneId);
-  const mh = maxHitTaken(s, state.zoneId);
-  const bossLife = monsterBaseLife(zone.level) * THREATS.boss.lifeMult;
+  const zone = getZone(area);
+  const mh = maxHitTaken(s, area);
+  const bossLife = monsterBaseLife(zone.level) * THREATS.boss.lifeMult * (zone.lifeMult || 1) * (zone.champion ? 1.5 : 1);
   const ttk = bossLife / Math.max(1, d.dps);
   const resRow = (t) => {
-    const eff = effectiveRes(s, t, state.zoneId);
+    const eff = effectiveRes(s, t, area);
     const low = eff < 0 ? 'neg' : eff < 30 ? 'low' : '';
     return `<div class="kv"><span>${dt(t)} res</span><b class="${low}">${fmt(eff)}% <span class="muted">/ ${s.maxRes[t]}%</span></b></div>`;
   };
@@ -102,7 +105,7 @@ export function renderVitals(state) {
     ${bar('xp', ch.xp, need, '')}
     ${bar('life', Math.max(0, p.life), s.life, `Life ${fmt(Math.max(0, p.life))} / ${fmt(s.life)}`)}
     ${bar('mana', p.mana, s.mana, `Mana ${fmt(p.mana)} / ${fmt(s.mana)}`)}
-    ${p.blight && p.blight.length ? `<div class="blight small">Blight ×${p.blight.length}: losing ${fmt(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, 'chaos', state.zoneId) / 100))} life per second</div>` : ''}
+    ${p.blight && p.blight.length ? `<div class="blight small">Blight ×${p.blight.length}: losing ${fmt(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, 'chaos', area) / 100))} life per second</div>` : ''}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? 's' : ''}` : ''}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt(d.hitMin)}–${fmt(d.hitMax)}</b></div>
@@ -169,7 +172,7 @@ export function renderDiagnosis(state) {
   let body;
   if (!d.stalled) {
     body = `<div class="diag-badge ok">Progressing</div>
-      <p class="muted">No stall in ${esc(getZone(state.zoneId).name)} over your last ${d.runsConsidered} run${d.runsConsidered === 1 ? '' : 's'}. When the character gets stuck, the cause shows here.</p>`;
+      <p class="muted">No stall in ${esc(getZone(state.run.zoneId).name)} over your last ${d.runsConsidered} run${d.runsConsidered === 1 ? '' : 's'}. When the character gets stuck, the cause shows here.</p>`;
   } else {
     const p = d.primary;
     body = `<div class="diag-badge stalled">Stalled · ${p.state}</div>
@@ -179,7 +182,7 @@ export function renderDiagnosis(state) {
   }
   const recent = state.runHistory.slice(-8).reverse();
   const runs = recent.length
-    ? `<ul class="runs">${recent.map((r) => `<li><span class="zone-tag">Z${r.zoneId}</span><span class="${r.outcome === 'died' ? 'neg' : 'good'}">${r.outcome === 'died' ? 'Died' : 'Cleared'}</span><span class="muted">${r.outcome === 'died' ? `pack ${Math.min(r.packs.length + 1, 10)}${r.bossStart != null ? ' (boss)' : ''}` : `${Math.round(r.end - r.start)}s`}</span><span class="muted">+${r.items} items</span></li>`).join('')}</ul>`
+    ? `<ul class="runs">${recent.map((r) => `<li><span class="zone-tag">${typeof r.zoneId === 'number' ? `Z${r.zoneId}` : 'Map'}</span><span class="${r.outcome === 'died' ? 'neg' : 'good'}">${r.outcome === 'died' ? 'Died' : 'Cleared'}</span><span class="muted">${r.outcome === 'died' ? `pack ${Math.min(r.packs.length + 1, 10)}${r.bossStart != null ? ' (boss)' : ''}` : `${Math.round(r.end - r.start)}s`}</span><span class="muted">+${r.items} items</span></li>`).join('')}</ul>`
     : '<p class="muted small">No finished runs yet.</p>';
   return `${body}<h3>Recent runs</h3>${runs}
     <p class="muted small totals">${fmt(state.lifetime.kills)} kills · ${fmt(state.lifetime.deaths)} deaths · ${fmt(state.lifetime.runs)} runs</p>`;
@@ -647,10 +650,76 @@ export function renderAutomation(state) {
       ${auto ? `<p class="muted small">Your rules salvaged ${auto} items over the last ${last.length} runs.</p>` : ''}</section>
     <section><h3>Coming later</h3>
       <ul class="small muted tree-help">
-        <li><b>Map runner</b>: runs maps from a queue (needs maps).</li>
+        ${automationUnlocked(state, 'mapRunner') ? '' : `<li><b>Map runner</b>: runs maps from your stash automatically (first clear of a tier ${AUTOMATION.mapRunner.mapTier} map).</li>`}
         <li><b>Craft rules</b>: repeat a currency until a mod appears, with a spending limit (after your first league reset).</li>
         <li><b>Upgrade advisor</b>: flags drops that would raise your damage or survivability (after your second league reset).</li>
       </ul>
       <p class="muted small">Salvaged items become Scrap, which the Smith and passive refunds use.</p></section>
+  </div>`;
+}
+
+// ---------- Maps ----------
+
+function mapRow(m, selected) {
+  const L = MAP_LAYOUTS[m.layout];
+  const iiq = mapIiq(m);
+  return `<button class="inv-row ${selected ? 'selected' : ''}" data-action="select-map" data-uid="${m.uid}">
+    <span class="r-${m.rarity} inv-name">Tier ${m.tier} · ${esc(L.name)}</span>
+    <span class="muted small">${cap(m.rarity)}${iiq ? ` · +${iiq}% items` : ''}</span>
+    <span class="inv-mods small">${m.mods.map((id) => MAP_MODS[id].name).join(' · ') || '<span class="muted">no mods</span>'}</span></button>`;
+}
+
+export function renderMaps(state, ui) {
+  const mp = state.mapProgress;
+  if (!state.maps.length && !mp.cleared.length && !state.progress.cleared.includes(10)) {
+    return `<div class="help"><p>Maps are the endgame. The boss of zone 10 drops your first map; each map you clear can drop more.</p>
+      <ul class="small muted tree-help">
+        <li>Map tiers go from 1 to ${MAP_RULES.maxTier}. Monster level is ${mapLevel(1)} at tier 1 and rises by ${MAP_RULES.levelPerTier} per tier.</li>
+        <li>Your elemental resistances are ${MAP_RULES.resPenalty}% lower in maps, and monsters resist elements more each tier.</li>
+        <li>Map mods make a map harder but raise how many items drop.</li>
+        <li>First clears of tiers ${MAP_RULES.bonusPointTiers.join(', ')} give 2 passive points each.</li>
+      </ul></div>`;
+  }
+  const sel = state.maps.find((m) => m.uid === ui.selectedMap) || null;
+  const list = state.maps.slice().sort((a, b) => b.tier - a.tier || b.uid - a.uid);
+  const tiers = Array.from({ length: MAP_RULES.maxTier }, (_, i) => i + 1).map((t) => {
+    const done = mp.cleared.includes(t);
+    const bonus = MAP_RULES.bonusPointTiers.includes(t);
+    return `<span class="tier-cell ${done ? 'done' : ''}" title="Tier ${t}${done ? ': cleared' : ''}${bonus ? ' · 2 passive points on first clear' : ''}">${t}${bonus ? '<i>+2</i>' : ''}</span>`;
+  }).join('');
+  let detail = '<p class="muted">Select a map to see its monsters, mods and rewards, then run it. Running a map uses it up, whether you clear it or die.</p>';
+  if (sel) {
+    const L = MAP_LAYOUTS[sel.layout];
+    const total = L.mix.reduce((a, m) => a + m.weight, 0);
+    const mix = (sel.mods.includes('teeming') ? [{ threat: 'swarm', weight: 1 }] : L.mix).map((m) => `${THREATS[m.threat].name}${m.element ? ` (${m.element})` : ''} ${sel.mods.includes('teeming') ? 100 : Math.round((m.weight / total) * 100)}%`).join(' · ');
+    const locked = sel.tier > mp.highest + 1;
+    const crafts = ['kindling', 'tempest', 'forge', 'wildfire', 'crown', 'ash'].map((c) => {
+      const reason = canCraftMap(c, sel, state.currency);
+      return `<button class="cur-btn" data-action="craft-map" data-cur="${c}" data-uid="${sel.uid}" ${reason ? 'disabled' : ''} title="${esc(reason || '')}"><span>${CURRENCY[c].name}</span><span class="count">${state.currency[c]}</span></button>`;
+    }).join('');
+    detail = `<div class="item-card r-${sel.rarity}">
+        <div class="item-name">${esc(L.name)}</div>
+        <div class="item-sub">${cap(sel.rarity)} map · tier ${sel.tier} · monster level ${mapLevel(sel.tier)} · monsters resist elements ${MAP_RULES.eleRes(sel.tier)}%</div>
+        <div class="item-base">${mix}</div>
+        <div class="item-base">Boss: ${esc(L.boss.name)} (${L.boss.damageType})</div>
+        <ul class="mods">${sel.mods.map((id) => `<li><b>${MAP_MODS[id].name}</b>&nbsp;${esc(MAP_MODS[id].text)} <span class="muted small">+${MAP_MODS[id].iiq}% items</span></li>`).join('') || '<li class="muted">No mods. Kindling or Forge adds some: harder, but more loot.</li>'}</ul>
+      </div>
+      <div class="actions"><button class="primary" data-action="run-map" data-uid="${sel.uid}" ${locked ? 'disabled' : ''}>Run this map</button><button data-action="discard-map" data-uid="${sel.uid}">Discard (+1 Scrap)</button></div>
+      ${locked ? `<p class="muted small">Clear a tier ${sel.tier - 1} map first.</p>` : ''}
+      <h4>Craft this map</h4><div class="cur-grid">${crafts}</div>`;
+  }
+  const runner = automationUnlocked(state, 'mapRunner')
+    ? `<div class="runner"><label class="check"><input type="checkbox" id="map-runner" data-change="map-runner" ${state.mapRunner.on ? 'checked' : ''}> Map runner: run maps from the stash automatically</label>
+       <label class="small">Order <select id="map-order" data-change="map-order"><option value="highest" ${state.mapRunner.order === 'highest' ? 'selected' : ''}>Highest tier first</option><option value="lowest" ${state.mapRunner.order === 'lowest' ? 'selected' : ''}>Lowest tier first</option></select></label></div>`
+    : `<p class="muted small">Map runner unlocks on your first tier ${AUTOMATION.mapRunner.mapTier} clear.</p>`;
+  const inMap = state.run.map ? `<p class="small good">Running ${esc(getZone(state.run.zoneId).name)} now.</p>` : '';
+  return `<div class="gear-grid">
+    <section class="gear-left">
+      <h3>Tiers cleared</h3><div class="tier-grid">${tiers}</div>
+      ${inMap}${runner}
+      <h3>Map stash <span class="muted small">${state.maps.length} / ${MAP_RULES.stashSize}</span></h3>
+      <div class="inv">${list.map((m) => mapRow(m, sel === m)).join('') || '<p class="muted small empty">No maps. Clear zone 10 or a map to find more.</p>'}</div>
+    </section>
+    <section class="gear-right">${detail}</section>
   </div>`;
 }

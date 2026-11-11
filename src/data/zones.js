@@ -137,8 +137,27 @@ export const ZONES = [
   },
 ];
 
-// Resistance penalty by zone. Zones 1-5 have none (doc: -20% from zone 6, -40% in maps).
+// Maps are areas too. They are registered at runtime by id ('map:<uid>').
+const AREAS = new Map();
+export function registerArea(area) {
+  AREAS.set(area.id, area);
+}
+export function areaById(id) {
+  if (typeof id === 'number') return ZONES.find((z) => z.id === id);
+  return AREAS.get(id);
+}
+
+// Resistance penalty by area. Zones 1-5 have none, zones 6-10 have 20.
+// Maps set their own (see data/maps.js).
 export function zoneResPenalty(zoneId) {
+  const a = typeof zoneId === 'number' ? null : AREAS.get(zoneId);
+  if (a) return a.resPenalty || 0;
   if (zoneId >= 6) return 20;
   return 0;
+}
+
+// Reduction to maximum resistances in an area (the "Exposed" map mod).
+export function zoneMaxResMinus(zoneId) {
+  const a = typeof zoneId === 'number' ? null : AREAS.get(zoneId);
+  return a ? a.maxResMinus || 0 : 0;
 }

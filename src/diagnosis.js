@@ -5,7 +5,7 @@
 // - always show the player's current value next to the threat's value
 
 import { THREATS } from './data/monsters.js';
-import { ZONES } from './data/zones.js';
+import { areaById } from './data/zones.js';
 import { effectiveRes, evadeChance, damageFactorVs } from './stats.js';
 import { RECENT_SECONDS } from './game.js';
 
@@ -20,7 +20,7 @@ function threatLabel(threat) {
 }
 
 export function diagnosisWindow(state) {
-  const zoneId = state.zoneId;
+  const zoneId = state.run ? state.run.zoneId : state.zoneId;
   const finished = state.runHistory.filter((r) => r.zoneId === zoneId);
   const lastN = finished.slice(-WINDOW_RUNS);
   const recent = finished.filter((r) => r.end >= state.time - WINDOW_SECONDS);
@@ -59,7 +59,8 @@ function lookAtFor(type, threat) {
 }
 
 export function diagnose(state, stats) {
-  const zone = ZONES.find((z) => z.id === state.zoneId);
+  const zid = state.run ? state.run.zoneId : state.zoneId;
+  const zone = areaById(zid);
   const runs = diagnosisWindow(state);
   const causes = [];
 
@@ -74,7 +75,7 @@ export function diagnose(state, stats) {
     for (const d of deaths) if (counts[key(d)] > counts[key(best)]) best = d;
     const k = mainKiller(best);
     const n = counts[key(best)];
-    const detailStat = k.type === 'physical' ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, state.zoneId);
+    const detailStat = k.type === 'physical' ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, zid);
     let message;
     if (k.threat === 'blight') {
       message = `Rotted away by Blight: its stacks dealt ${fmt(k.taken)} chaos damage over your last ${RECENT_SECONDS} seconds. Your chaos resistance is ${fmt(stats.res.chaos)}% and you regenerate ${fmt(stats.lifeRegen)} life per second.`;
@@ -109,7 +110,7 @@ export function diagnose(state, stats) {
       : `${THREATS[worst.threat].name} ${worst.type === 'physical' && worst.threat === 'brute' ? 'slams' : 'hits'}`;
     const tail = worst.type === 'physical'
       ? `More armour or life would help. ${physLine(stats, worst.raw, zone)}`
-      : resLine(stats, worst.type, state.zoneId);
+      : resLine(stats, worst.type, zid);
     causes.push({
       state: 'Fragile',
       score: 50 + worst.pct * 50,

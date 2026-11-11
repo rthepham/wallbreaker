@@ -6,7 +6,7 @@
 import {
   newGame, runTicks, getStats, equip, salvageAll, statsWithItem, craftItem, smithItem,
   findItem, getZone, setSkill, supportSlots, statsWithSkill,
-  allocatePassive, canAllocate, statsWithPassives,
+  allocatePassive, canAllocate, statsWithPassives, setMapRunner, runMap,
 } from '../src/game.js';
 import { PASSIVES } from '../src/data/passives.js';
 import { supportFits } from '../src/data/skills.js';
@@ -137,6 +137,12 @@ for (let t = 0; t < totalTicks; t += 10) {
       upgrade(state);
     }
     salvageAll(state, 'normal');
+    // Run maps once they exist, highest allowed tier first.
+    if (state.maps.length) setMapRunner(state, { on: true });
+    if (state.mapProgress.cleared.includes(4) === false && state.maps.length && !state.run.map && state.progress.cleared.includes(10)) {
+      const ok = state.maps.filter((m) => m.tier <= state.mapProgress.highest + 1).sort((a, b) => b.tier - a.tier)[0];
+      if (ok) runMap(state, ok.uid);
+    }
     const s = getStats(state);
     report.push(
       `${(state.time / 60).toFixed(1).padStart(5)}m z${rec.zoneId} ${rec.outcome.padEnd(7)} ${Math.round(rec.end - rec.start)}s` +
@@ -161,6 +167,9 @@ for (const [z, t] of Object.entries(tally)) console.log(`  z${z}: ${t.runs} runs
 console.log('\nFirst clears (minutes):', JSON.stringify(Object.fromEntries(Object.entries(firstClear).map(([z, t]) => [z, Math.round(t / 60)]))));
 const s = getStats(state);
 const d = diagnose(state, s);
+console.log('Maps: tiers cleared', JSON.stringify(state.mapProgress.cleared.sort((a, b) => a - b)), 'stash', state.maps.length);
+const mapRuns = allRuns.filter((r) => typeof r.zoneId === 'string');
+console.log('Map runs:', mapRuns.length, 'cleared', mapRuns.filter((r) => r.outcome === 'cleared').length);
 console.log('Zone now:', state.zoneId, getZone(state.zoneId).name, 'deaths', state.lifetime.deaths);
 console.log('Diagnosis:', d.primary ? `${d.primary.state}: ${d.primary.message}` : 'none');
 for (const c of d.secondary) console.log('  also:', `${c.state}: ${c.message}`);

@@ -3,7 +3,9 @@
 
 import { PLAYER, RULES } from './data/player.js';
 import { MONSTERS, THREATS } from './data/monsters.js';
-import { ZONES } from './data/zones.js';
+import { ZONES, areaById, registerArea } from './data/zones.js';
+import { MAP_RULES } from './data/maps.js';
+import { makeMap, mapArea, rollMapDrops, craftMap } from './maps.js';
 import { BASES, EQUIP_SLOTS, slotsForType } from './data/items.js';
 import { CURRENCY_ORDER } from './data/currency.js';
 import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
@@ -40,7 +42,7 @@ function rng(state) {
 }
 
 export function getZone(id) {
-  return ZONES.find((z) => z.id === id);
+  return areaById(id);
 }
 
 export function xpToNext(level) {
@@ -95,6 +97,9 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
     nextMonsterId: 1,
     lifetime: { kills: 0, deaths: 0, runs: 0 },
     automation: { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] },
+    maps: [],
+    mapProgress: { cleared: [], highest: 0 },
+    mapRunner: { on: false, order: 'highest' },
   };
   const r = rng(state);
   // Starting gear: a plain weapon and armour, no ring.
@@ -131,7 +136,8 @@ function newRecord(state, zoneId) {
 
 export function startRun(state, zoneId) {
   const s = getStats(state);
-  state.zoneId = zoneId;
+  // state.zoneId is the zone you farm; a map run doesn't change it.
+  if (typeof zoneId === 'number') state.zoneId = zoneId;
   state.player.life = s.life;
   state.player.mana = s.mana;
   state.player.attackTimer = 0;
@@ -173,12 +179,12 @@ export function tick(state) {
       break;
     case 'dead':
       run.timer -= DT;
-      if (run.timer <= 0) startRun(state, state.zoneId);
+      if (run.timer <= 0) startNext(state, false);
       break;
     case 'done':
       regen(state, DT, true);
       run.timer -= DT;
-      if (run.timer <= 0) startRun(state, nextZoneChoice(state));
+      if (run.timer <= 0) startNext(state, true);
       break;
     default:
       break;
@@ -192,6 +198,16 @@ export function runTicks(state, n) {
 
 function nextZoneChoice(state) {
   return state.autoAdvance ? state.progress.unlocked : state.zoneId;
+}
+
+// After a run ends: the map runner may start a map; otherwise farm the zone.
+// A death in a zone retries the same zone; a map is used up either way.
+function startNext(state, cleared) {
+  if (state.mapRunner.on && automationUnlocked(state, 'mapRunner')) {
+    const next = pickRunnerMap(state);
+    if (next) return runMap(state, next.uid);
+  }
+  startRun(state, cleared ? nextZoneChoice(state) : state.zoneId);
 }
 
 function spawnNext(state) {
@@ -248,7 +264,10 @@ function fightTick(state) {
     m.attackTimer -= DT * pace;
     if (m.attackTimer <= 0) {
       if (m.threat === 'blight') applyBlight(state, m);
-      else monsterHit(state, s, m, 1);
+      else {
+        monsterHit(state, s, m, 1);
+        if (getZone(run.zoneId).withering) applyBlight(state, m, 0.25);
+      }
       m.attackTimer += m.interval;
       if (p.life <= 0) return playerDied(state, m);
     }
@@ -278,12 +297,12 @@ function fightTick(state) {
   regen(state, DT);
 }
 
-function applyBlight(state, m) {
+function applyBlight(state, m, scale = 1) {
   const p = state.player;
   const B = THREATS.blight.stacks;
   p.blight ||= [];
   if (p.blight.length >= B.max) p.blight.shift();
-  p.blight.push({ dps: m.hit, time: B.duration });
+  p.blight.push({ dps: m.hit * scale, time: B.duration });
   state.run.blightSource = m;
 }
 
@@ -403,6 +422,9 @@ function monsterHit(state, s, m, mult, isBig = false) {
   } else {
     taken = damageTaken(s, type, raw, state.run.zoneId);
   }
+  // Fiery maps: monsters deal extra fire damage with each hit.
+  const extra = getZone(state.run.zoneId).extraFire;
+  if (extra) taken += damageTaken(s, 'fire', raw * extra, state.run.zoneId);
   taken = Math.max(0, taken);
   p.life -= taken;
   state.run.lastHit = { raw, taken, type, isBig };
@@ -481,7 +503,9 @@ function packCleared(state) {
 }
 
 export function automationUnlocked(state, key) {
-  return state.progress.cleared.includes(AUTOMATION[key].zone);
+  const A = AUTOMATION[key];
+  if (A.mapTier) return !!state.mapProgress && state.mapProgress.cleared.includes(A.mapTier);
+  return state.progress.cleared.includes(A.zone);
 }
 
 // What the automation rules do with a dropped item: 'keep' or 'salvage'.
@@ -540,6 +564,7 @@ function finishRecord(state, outcome) {
 function runComplete(state) {
   const run = state.run;
   const zoneId = run.zoneId;
+  if (run.map) return mapComplete(state);
   finishRecord(state, 'cleared');
   log(state, 'clear', `${getZone(zoneId).name} cleared in ${Math.round(state.time - run.record.start)}s.`);
   const firstClear = !state.progress.cleared.includes(zoneId);
@@ -553,8 +578,87 @@ function runComplete(state) {
       log(state, 'clear', `First clear! ${getZone(zoneId + 1).name} is now open.`);
     }
   }
+  // The last zone's boss drops tier 1 maps: always the first time, then sometimes.
+  if (zoneId === ZONES[ZONES.length - 1].id && (firstClear || rng(state).chance(MAP_RULES.zone10BossChance))) {
+    addMaps(state, [makeMap(rng(state), state.nextUid++, 1)]);
+    if (firstClear) log(state, 'clear', 'The Last Wall falls. A map drops: maps are the endgame. Open the Maps tab.');
+  }
   run.phase = 'done';
   run.timer = RULES.runEndSeconds;
+}
+
+function mapComplete(state) {
+  const run = state.run;
+  const map = run.map;
+  finishRecord(state, 'cleared');
+  log(state, 'clear', `Tier ${map.tier} map cleared in ${Math.round(state.time - run.record.start)}s.`);
+  const mp = state.mapProgress;
+  if (!mp.cleared.includes(map.tier)) {
+    mp.cleared.push(map.tier);
+    mp.highest = Math.max(mp.highest, map.tier);
+    log(state, 'clear', `First clear of a tier ${map.tier} map!`);
+    if (MAP_RULES.bonusPointTiers.includes(map.tier)) log(state, 'level', 'You gain 2 passive points.');
+    if (map.tier === AUTOMATION.mapRunner.mapTier) log(state, 'clear', 'Map runner unlocked (Automation tab).');
+    grantSupport(state);
+  }
+  const drops = rollMapDrops(rng(state), map, mp.highest, newUid(state));
+  addMaps(state, drops);
+  if (drops.length) log(state, 'loot rare', `${drops.length} map${drops.length > 1 ? 's' : ''} dropped: tier ${drops.map((d) => d.tier).join(', ')}.`);
+  run.phase = 'done';
+  run.timer = RULES.runEndSeconds;
+}
+
+function addMaps(state, maps) {
+  for (const m of maps) {
+    if (state.maps.length >= MAP_RULES.stashSize) {
+      log(state, 'warn', 'Map stash full: a map was left behind.');
+      continue;
+    }
+    state.maps.push(m);
+  }
+}
+
+// ---------- Maps ----------
+
+export function runMap(state, uid) {
+  const idx = state.maps.findIndex((m) => m.uid === uid);
+  if (idx < 0) return { ok: false, reason: 'Map not found.' };
+  const [map] = state.maps.splice(idx, 1);
+  const area = mapArea(map);
+  registerArea(area);
+  startRun(state, area.id);
+  state.run.map = map;
+  log(state, 'info', `Entering ${area.name}${map.mods.length ? ` (${map.mods.join(', ')})` : ''}.`);
+  return { ok: true };
+}
+
+function pickRunnerMap(state) {
+  if (!state.maps.length) return null;
+  const allowed = state.maps.filter((m) => m.tier <= state.mapProgress.highest + 1);
+  if (!allowed.length) return null;
+  const order = state.mapRunner.order === 'lowest' ? 1 : -1;
+  return allowed.slice().sort((a, b) => order * (a.tier - b.tier))[0];
+}
+
+export function setMapRunner(state, patch) {
+  state.mapRunner = { ...state.mapRunner, ...patch };
+  return { ok: true };
+}
+
+export function craftOnMap(state, currencyId, uid) {
+  const map = state.maps.find((m) => m.uid === uid);
+  if (!map) return { ok: false, reason: 'Map not found.' };
+  const res = craftMap(rng(state), currencyId, map, state.currency);
+  state.rngState = rng(state).getState();
+  return res;
+}
+
+export function discardMap(state, uid) {
+  const idx = state.maps.findIndex((m) => m.uid === uid);
+  if (idx < 0) return { ok: false, reason: 'Map not found.' };
+  state.maps.splice(idx, 1);
+  state.scrap += 1;
+  return { ok: true };
 }
 
 function playerDied(state, killer) {
@@ -775,6 +879,7 @@ export function statsWithSkill(state, skill) {
 export function passivePoints(state) {
   let pts = state.character.level - 1;
   for (const b of PASSIVE_RULES.bonusPoints) if (state.progress.cleared.includes(b.zone)) pts += b.points;
+  for (const t of MAP_RULES.bonusPointTiers) if (state.mapProgress && state.mapProgress.cleared.includes(t)) pts += 2;
   return pts;
 }
 
@@ -923,6 +1028,7 @@ export function serialize(state) {
 export function deserialize(text) {
   const data = JSON.parse(text);
   const state = migrate(data);
+  if (state.run && state.run.map) registerArea(mapArea(state.run.map));
   if (!state.run || !getZone(state.run.zoneId)) startRun(state, state.zoneId || 1);
   return state;
 }
@@ -933,6 +1039,9 @@ export function migrate(data) {
   if (data.version > SAVE_VERSION) throw new Error('Save is from a newer version.');
   // Fields added without a version bump get defaults.
   data.automation ||= { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] };
+  data.maps ||= [];
+  data.mapProgress ||= { cleared: [], highest: 0 };
+  data.mapRunner ||= { on: false, order: 'highest' };
   if (data.version === 1) {
     // v2: skills and supports.
     data.character.skill = { id: data.character.skillId || 'cleave', supports: [] };

@@ -14,8 +14,12 @@ export function makeMonster(rng, id, { zone, threatId, element, rarity = 'normal
   const T = THREATS[threatId];
   const R = MONSTERS.rarity[rarity];
   const level = zone.level;
-  let lifeMult = T.lifeMult * R.lifeMult;
+  let lifeMult = T.lifeMult * R.lifeMult * (zone.lifeMult || 1);
   let damageMult = T.hitMult * R.damageMult;
+  if (isBoss && zone.champion) {
+    lifeMult *= 1.5;
+    damageMult *= 1.5;
+  }
   let speedMult = 1;
   let mod = null;
   if (rarity === 'rare') {
@@ -54,7 +58,7 @@ export function makeMonster(rng, id, { zone, threatId, element, rarity = 'normal
     attackTimer: interval * (0.5 + rng.next() * 0.5),
     isBoss,
     xpMult: T.xpMult * (isBoss ? 1 : R.xpMult),
-    dropMult: (T.dropMult ?? 1) * R.dropMult,
+    dropMult: (T.dropMult ?? 1) * R.dropMult * (1 + (zone.iiq || 0) / 100),
   };
   if (isBoss) {
     m.bigHit = { ...T.bigHit, timer: T.bigHit.interval, warned: false };

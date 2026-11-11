@@ -2,12 +2,12 @@
 
 import {
   newGame, runTicks, serialize, deserialize, selectZone, setAutoAdvance, equip, unequip,
-  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, applyOffline, setAutomation, allocatePassive, refundPassive, passivePoints, passivesSpent,
+  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, applyOffline, setAutomation, runMap, craftOnMap, discardMap, setMapRunner, allocatePassive, refundPassive, passivePoints, passivesSpent,
 } from '../game.js';
 import { CURRENCY } from '../data/currency.js';
 import { SKILLS } from '../data/skills.js';
 import {
-  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree, renderAutomation,
+  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree, renderAutomation, renderMaps,
 } from './render.js';
 
 const SAVE_KEY = 'wallbreaker.save';
@@ -98,7 +98,7 @@ function render(force = false) {
 
   // The lower panels only re-render when something they show has changed,
   // so dropdowns and scroll positions aren't reset 10 times a second.
-  const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(',')}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}`;
+  const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(',')}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}|${state.maps.length}|${state.run.zoneId}|${state.mapProgress.cleared.length}`;
   if (!force && sig === lowerSig) return;
   lowerSig = sig;
   if (ui.tab === 'gear') {
@@ -118,6 +118,8 @@ function render(force = false) {
     if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
     const inv2 = document.querySelector('.inv');
     if (inv2) inv2.scrollTop = scroll;
+  } else if (ui.tab === 'maps') {
+    put('maps', renderMaps(state, ui));
   } else if (ui.tab === 'auto') {
     put('auto', renderAutomation(state));
   } else if (ui.tab === 'tree') {
@@ -271,6 +273,27 @@ function handle(action, el) {
       setAutomation(state, { keepTypes: [...set] });
       break;
     }
+    case 'select-map':
+      ui.selectedMap = uid;
+      break;
+    case 'run-map':
+      res = runMap(state, uid);
+      if (res.ok) { ui.selectedMap = null; notify('Map opened.', 'good'); }
+      break;
+    case 'craft-map':
+      res = craftOnMap(state, el.dataset.cur, uid);
+      if (res.ok) notify(`Used ${CURRENCY[el.dataset.cur].name} on the map.`, 'good');
+      break;
+    case 'discard-map':
+      res = discardMap(state, uid);
+      if (res.ok) ui.selectedMap = null;
+      break;
+    case 'map-runner':
+      setMapRunner(state, { on: el.checked });
+      break;
+    case 'map-order':
+      setMapRunner(state, { order: el.value });
+      break;
     case 'offline-close':
       $('offline').hidden = true;
       break;

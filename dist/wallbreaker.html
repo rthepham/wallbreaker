@@ -316,6 +316,11 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
 .fam-group { border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 10px; margin: 0; font-size: 0.85rem; }
 .fam-group legend { color: var(--brass); font-family: var(--f-display); padding: 0 4px; }
 .type-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; }
+.tier-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.tier-cell { position: relative; text-align: center; font-family: var(--f-mono); font-size: 0.85rem; padding: 6px 0; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); }
+.tier-cell.done { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.tier-cell i { position: absolute; top: 0; right: 2px; font-size: 0.6rem; font-style: normal; }
+.runner { display: grid; gap: 4px; margin: 8px 0; }
 .danger { background: #8c2f25; border-color: #c2493b; color: #fff4ee; }
 
 @media (max-width: 1100px) {
@@ -363,6 +368,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <button role="tab" data-action="tab" data-tab="gear" aria-selected="true">Gear &amp; crafting</button>
       <button role="tab" data-action="tab" data-tab="skills" aria-selected="false">Skills</button>
       <button role="tab" data-action="tab" data-tab="tree" aria-selected="false">Passive tree <span id="tree-count" class="count-badge"></span></button>
+      <button role="tab" data-action="tab" data-tab="maps" aria-selected="false">Maps</button>
       <button role="tab" data-action="tab" data-tab="auto" aria-selected="false">Automation</button>
       <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
       <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
@@ -371,6 +377,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <div data-panel="gear" id="gear" role="tabpanel"></div>
     <div data-panel="skills" id="skills" role="tabpanel" hidden></div>
     <div data-panel="tree" id="tree" role="tabpanel" hidden></div>
+    <div data-panel="maps" id="maps" role="tabpanel" hidden></div>
     <div data-panel="auto" id="auto" role="tabpanel" hidden></div>
     <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
     <div data-panel="help" role="tabpanel" hidden>
@@ -711,9 +718,201 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       targetPackSeconds: 6
     }
   ];
+  var AREAS = /* @__PURE__ */ new Map();
+  function registerArea(area) {
+    AREAS.set(area.id, area);
+  }
+  function areaById(id) {
+    if (typeof id === "number") return ZONES.find((z) => z.id === id);
+    return AREAS.get(id);
+  }
   function zoneResPenalty(zoneId) {
+    const a = typeof zoneId === "number" ? null : AREAS.get(zoneId);
+    if (a) return a.resPenalty || 0;
     if (zoneId >= 6) return 20;
     return 0;
+  }
+  function zoneMaxResMinus(zoneId) {
+    const a = typeof zoneId === "number" ? null : AREAS.get(zoneId);
+    return a ? a.maxResMinus || 0 : 0;
+  }
+
+  // src/data/maps.js
+  var MAP_RULES = {
+    maxTier: 16,
+    // DOC: doc uses 52 + 2 x tier. Our zone 10 is level 42, so maps start just above it.
+    levelBase: 44,
+    levelPerTier: 2,
+    // DOC: doc says -40% resistances in maps. -30% keeps the 75% cap reachable with gear.
+    resPenalty: 30,
+    // Monsters resist all elements: 10% at tier 1 rising to 30% at tier 16.
+    eleRes: (tier) => 10 + Math.round((tier - 1) * 20 / 15),
+    packs: 10,
+    stashSize: 60,
+    // The zone 10 boss drops a tier 1 map: always on its first clear, then sometimes.
+    zone10BossChance: 0.15,
+    // Maps dropped by a map's boss: how many, and their tier relative to the map.
+    dropCount: [[0, 30], [1, 50], [2, 20]],
+    tierShift: [[-1, 20], [0, 60], [1, 20]],
+    rarityWeights: { normal: 70, magic: 25, rare: 5 },
+    // First clears of these tiers give 2 passive points each.
+    bonusPointTiers: [4, 8, 12]
+  };
+  var MAP_LAYOUTS = {
+    sunken_bastion: {
+      name: "Sunken Bastion",
+      mix: [{ threat: "brute", weight: 2 }, { threat: "caster", element: "fire", weight: 1 }, { threat: "swarm", weight: 1 }],
+      boss: { name: "The Drowned Castellan", damageType: "physical", res: { physical: 30 } }
+    },
+    glacier_vault: {
+      name: "Glacier Vault",
+      mix: [{ threat: "caster", element: "cold", weight: 2 }, { threat: "swarm", weight: 1 }, { threat: "blight", weight: 1 }],
+      boss: { name: "Hoarmaw", damageType: "cold", res: { cold: 40 } }
+    },
+    storm_crag: {
+      name: "Storm Crag",
+      mix: [{ threat: "caster", element: "lightning", weight: 2 }, { threat: "brute", weight: 1 }],
+      boss: { name: "The Thunder Abbot", damageType: "lightning", res: { lightning: 40 } }
+    },
+    plague_warrens: {
+      name: "Plague Warrens",
+      mix: [{ threat: "blight", weight: 2 }, { threat: "swarm", weight: 2 }],
+      boss: { name: "Mother of Rot", damageType: "chaos", res: { physical: 20 } }
+    },
+    bone_orchard: {
+      name: "Bone Orchard",
+      mix: [{ threat: "brute", weight: 2 }, { threat: "swarm", weight: 1 }, { threat: "caster", element: "cold", weight: 1 }],
+      boss: { name: "The Ossuary King", damageType: "physical", res: { physical: 25, cold: 25 } }
+    }
+  };
+  var MAP_MODS = {
+    fiery: { name: "Fiery", text: "Monsters deal 40% extra damage as fire", iiq: 15 },
+    hardened: { name: "Hardened", text: "Monsters have 40% more life", iiq: 15 },
+    exposed: { name: "Exposed", text: "Players have -15% to maximum resistances", iiq: 20 },
+    teeming: { name: "Teeming", text: "All packs are Swarm packs", iiq: 20 },
+    withering: { name: "Withering", text: "All monsters apply Blight", iiq: 20 },
+    champion: { name: "Champion", text: "Boss has 50% more life and damage", iiq: 25 }
+  };
+  var MAP_MOD_COUNT = { normal: [0, 0], magic: [1, 2], rare: [3, 4] };
+
+  // src/data/currency.js
+  var CURRENCY = {
+    kindling: { name: "Kindling", effect: "Normal \u2192 Magic", weight: 40 },
+    tempest: { name: "Tempest", effect: "Reroll a Magic item's mods", weight: 25 },
+    forge: { name: "Forge", effect: "Normal \u2192 Rare", weight: 12 },
+    ash: { name: "Ash", effect: "Reset any item to Normal", weight: 10 },
+    wildfire: { name: "Wildfire", effect: "Reroll all mods on a Rare", weight: 8 },
+    crown: { name: "Crown", effect: "Add one random mod to a Rare", weight: 1 }
+  };
+  var CURRENCY_ORDER = ["kindling", "tempest", "forge", "ash", "wildfire", "crown"];
+  var CONVERSIONS = [
+    { from: "kindling", amount: 5, to: "tempest" },
+    { from: "tempest", amount: 4, to: "forge" },
+    { from: "wildfire", amount: 6, to: "crown" }
+  ];
+  var DROPS = {
+    itemChance: 0.08,
+    rarityWeights: { normal: 70, magic: 25, rare: 5 },
+    currencyChance: 0.03,
+    bossItems: 3,
+    bossCurrency: 2
+  };
+  var SCRAP = {
+    salvage: { normal: 1, magic: 2, rare: 5 },
+    // Smith cost = base + perTier * tier
+    smithBase: 6,
+    smithPerTier: 6,
+    // Smith crafts at the best tier the item level allows, capped here.
+    smithMaxTier: 3
+  };
+
+  // src/maps.js
+  function mapLevel(tier) {
+    return MAP_RULES.levelBase + MAP_RULES.levelPerTier * tier;
+  }
+  function mapIiq(map) {
+    return map.mods.reduce((a, id) => a + MAP_MODS[id].iiq, 0);
+  }
+  function rollMods(rng2, map) {
+    const [lo, hi] = MAP_MOD_COUNT[map.rarity];
+    const n = rng2.int(lo, hi);
+    const pool = Object.keys(MAP_MODS).filter((id) => !map.mods.includes(id));
+    map.mods = [];
+    for (let i = 0; i < n && pool.length; i++) {
+      map.mods.push(pool.splice(Math.floor(rng2.next() * pool.length), 1)[0]);
+    }
+  }
+  function makeMap(rng2, uid, tier, rarity = "normal", layout = null) {
+    const map = { uid, kind: "map", tier, rarity, layout: layout || rng2.pick(Object.keys(MAP_LAYOUTS)), mods: [] };
+    rollMods(rng2, map);
+    return map;
+  }
+  function mapArea(map) {
+    const L2 = MAP_LAYOUTS[map.layout];
+    const has = (id) => map.mods.includes(id);
+    return {
+      id: `map:${map.uid}`,
+      isMap: true,
+      map,
+      name: `${L2.name} (tier ${map.tier})`,
+      level: mapLevel(map.tier),
+      packs: MAP_RULES.packs,
+      mix: has("teeming") ? [{ threat: "swarm", weight: 1 }] : L2.mix,
+      boss: { ...L2.boss },
+      targetPackSeconds: 6,
+      monsterEleRes: MAP_RULES.eleRes(map.tier),
+      resPenalty: MAP_RULES.resPenalty,
+      maxResMinus: has("exposed") ? 15 : 0,
+      lifeMult: has("hardened") ? 1.4 : 1,
+      extraFire: has("fiery") ? 0.4 : 0,
+      withering: has("withering"),
+      champion: has("champion"),
+      iiq: mapIiq(map)
+    };
+  }
+  var MAP_CRAFTS = {
+    kindling: { need: "normal", to: "magic" },
+    forge: { need: "normal", to: "rare" },
+    tempest: { need: "magic", reroll: true },
+    wildfire: { need: "rare", reroll: true },
+    ash: { need: ["magic", "rare"], to: "normal" },
+    crown: { need: "rare", add: true }
+  };
+  function canCraftMap(currencyId, map, currency) {
+    const c = MAP_CRAFTS[currencyId];
+    if (!c) return "This currency does nothing to maps.";
+    if ((currency[currencyId] || 0) < 1) return `You have no ${CURRENCY[currencyId].name}.`;
+    const need = Array.isArray(c.need) ? c.need : [c.need];
+    if (!need.includes(map.rarity)) return `${CURRENCY[currencyId].name} needs a ${need.join(" or ")} map.`;
+    if (c.add && map.mods.length >= MAP_MOD_COUNT.rare[1]) return "This map has no room for another mod.";
+    return null;
+  }
+  function craftMap(rng2, currencyId, map, currency) {
+    const reason = canCraftMap(currencyId, map, currency);
+    if (reason) return { ok: false, reason };
+    currency[currencyId] -= 1;
+    const c = MAP_CRAFTS[currencyId];
+    if (c.to) {
+      map.rarity = c.to;
+      rollMods(rng2, map);
+    } else if (c.reroll) {
+      rollMods(rng2, map);
+    } else if (c.add) {
+      const pool = Object.keys(MAP_MODS).filter((id) => !map.mods.includes(id));
+      map.mods.push(rng2.pick(pool));
+    }
+    return { ok: true };
+  }
+  var weighted = (rng2, pairs) => rng2.weighted(pairs, (p) => p[1])[0];
+  function rollMapDrops(rng2, map, highestCleared, nextUid) {
+    let count = weighted(rng2, MAP_RULES.dropCount);
+    if (rng2.chance(mapIiq(map) / 100)) count++;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const tier = Math.max(1, Math.min(MAP_RULES.maxTier, highestCleared + 1, map.tier + weighted(rng2, MAP_RULES.tierShift)));
+      out.push(makeMap(rng2, nextUid(), tier, weighted(rng2, Object.entries(MAP_RULES.rarityWeights))));
+    }
+    return out;
   }
 
   // src/data/items.js
@@ -1088,37 +1287,6 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }
   };
 
-  // src/data/currency.js
-  var CURRENCY = {
-    kindling: { name: "Kindling", effect: "Normal \u2192 Magic", weight: 40 },
-    tempest: { name: "Tempest", effect: "Reroll a Magic item's mods", weight: 25 },
-    forge: { name: "Forge", effect: "Normal \u2192 Rare", weight: 12 },
-    ash: { name: "Ash", effect: "Reset any item to Normal", weight: 10 },
-    wildfire: { name: "Wildfire", effect: "Reroll all mods on a Rare", weight: 8 },
-    crown: { name: "Crown", effect: "Add one random mod to a Rare", weight: 1 }
-  };
-  var CURRENCY_ORDER = ["kindling", "tempest", "forge", "ash", "wildfire", "crown"];
-  var CONVERSIONS = [
-    { from: "kindling", amount: 5, to: "tempest" },
-    { from: "tempest", amount: 4, to: "forge" },
-    { from: "wildfire", amount: 6, to: "crown" }
-  ];
-  var DROPS = {
-    itemChance: 0.08,
-    rarityWeights: { normal: 70, magic: 25, rare: 5 },
-    currencyChance: 0.03,
-    bossItems: 3,
-    bossCurrency: 2
-  };
-  var SCRAP = {
-    salvage: { normal: 1, magic: 2, rare: 5 },
-    // Smith cost = base + perTier * tier
-    smithBase: 6,
-    smithPerTier: 6,
-    // Smith crafts at the best tier the item level allows, capped here.
-    smithMaxTier: 3
-  };
-
   // src/data/skills.js
   var SKILLS = {
     cleave: {
@@ -1487,7 +1655,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   // src/data/automation.js
   var AUTOMATION = {
     autoSalvage: { name: "Auto-salvage", zone: 3, text: "Salvages Normal items as they drop." },
-    lootFilter: { name: "Loot filter", zone: 8, text: "Salvages Magic and Rare items that have none of the mods you choose to keep." }
+    lootFilter: { name: "Loot filter", zone: 8, text: "Salvages Magic and Rare items that have none of the mods you choose to keep." },
+    mapRunner: { name: "Map runner", mapTier: 4, text: "Runs maps from your stash automatically, one after another." }
   };
   var DEFAULT_AUTOMATION = {
     salvageNormal: true,
@@ -1594,7 +1763,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (type === "physical") return 0;
     const raw = stats.res[type];
     const penalty = type === "chaos" ? 0 : zoneResPenalty(zoneId);
-    return Math.min(raw - penalty, stats.maxRes[type]);
+    const maxMinus = zoneMaxResMinus(zoneId);
+    return Math.min(raw - penalty, stats.maxRes[type] - maxMinus);
   }
   function damageTaken(stats, type, hit, zoneId) {
     if (type === "physical") return hit * (1 - armourReduction(stats.armour, hit));
@@ -1827,8 +1997,12 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const T2 = THREATS[threatId];
     const R = MONSTERS.rarity[rarity];
     const level = zone.level;
-    let lifeMult = T2.lifeMult * R.lifeMult;
+    let lifeMult = T2.lifeMult * R.lifeMult * (zone.lifeMult || 1);
     let damageMult = T2.hitMult * R.damageMult;
+    if (isBoss && zone.champion) {
+      lifeMult *= 1.5;
+      damageMult *= 1.5;
+    }
     let speedMult = 1;
     let mod = null;
     if (rarity === "rare") {
@@ -1867,7 +2041,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       attackTimer: interval * (0.5 + rng2.next() * 0.5),
       isBoss,
       xpMult: T2.xpMult * (isBoss ? 1 : R.xpMult),
-      dropMult: (T2.dropMult ?? 1) * R.dropMult
+      dropMult: (T2.dropMult ?? 1) * R.dropMult * (1 + (zone.iiq || 0) / 100)
     };
     if (isBoss) {
       m.bigHit = { ...T2.bigHit, timer: T2.bigHit.interval, warned: false };
@@ -2130,7 +2304,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return rt(state2).rng;
   }
   function getZone(id) {
-    return ZONES.find((z) => z.id === id);
+    return areaById(id);
   }
   function xpToNext(level) {
     return Math.round(PLAYER.xp.base * PLAYER.xp.growth ** level);
@@ -2177,7 +2351,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       nextUid: 1,
       nextMonsterId: 1,
       lifetime: { kills: 0, deaths: 0, runs: 0 },
-      automation: { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] }
+      automation: { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] },
+      maps: [],
+      mapProgress: { cleared: [], highest: 0 },
+      mapRunner: { on: false, order: "highest" }
     };
     const r = rng(state2);
     state2.character.equipment.weapon = makeItem(r, state2.nextUid++, { baseId: "rusted_blade", ilvl: 1 });
@@ -2211,7 +2388,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   }
   function startRun(state2, zoneId) {
     const s = getStats(state2);
-    state2.zoneId = zoneId;
+    if (typeof zoneId === "number") state2.zoneId = zoneId;
     state2.player.life = s.life;
     state2.player.mana = s.mana;
     state2.player.attackTimer = 0;
@@ -2250,12 +2427,12 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         break;
       case "dead":
         run.timer -= DT;
-        if (run.timer <= 0) startRun(state2, state2.zoneId);
+        if (run.timer <= 0) startNext(state2, false);
         break;
       case "done":
         regen(state2, DT, true);
         run.timer -= DT;
-        if (run.timer <= 0) startRun(state2, nextZoneChoice(state2));
+        if (run.timer <= 0) startNext(state2, true);
         break;
       default:
         break;
@@ -2267,6 +2444,13 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   }
   function nextZoneChoice(state2) {
     return state2.autoAdvance ? state2.progress.unlocked : state2.zoneId;
+  }
+  function startNext(state2, cleared) {
+    if (state2.mapRunner.on && automationUnlocked(state2, "mapRunner")) {
+      const next = pickRunnerMap(state2);
+      if (next) return runMap(state2, next.uid);
+    }
+    startRun(state2, cleared ? nextZoneChoice(state2) : state2.zoneId);
   }
   function spawnNext(state2) {
     const run = state2.run;
@@ -2316,7 +2500,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       m.attackTimer -= DT * pace;
       if (m.attackTimer <= 0) {
         if (m.threat === "blight") applyBlight(state2, m);
-        else monsterHit(state2, s, m, 1);
+        else {
+          monsterHit(state2, s, m, 1);
+          if (getZone(run.zoneId).withering) applyBlight(state2, m, 0.25);
+        }
         m.attackTimer += m.interval;
         if (p.life <= 0) return playerDied(state2, m);
       }
@@ -2342,12 +2529,12 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (tickBlight(state2, s)) return;
     regen(state2, DT);
   }
-  function applyBlight(state2, m) {
+  function applyBlight(state2, m, scale = 1) {
     const p = state2.player;
     const B = THREATS.blight.stacks;
     p.blight || (p.blight = []);
     if (p.blight.length >= B.max) p.blight.shift();
-    p.blight.push({ dps: m.hit, time: B.duration });
+    p.blight.push({ dps: m.hit * scale, time: B.duration });
     state2.run.blightSource = m;
   }
   function tickBlight(state2, s) {
@@ -2462,6 +2649,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     } else {
       taken = damageTaken(s, type, raw, state2.run.zoneId);
     }
+    const extra = getZone(state2.run.zoneId).extraFire;
+    if (extra) taken += damageTaken(s, "fire", raw * extra, state2.run.zoneId);
     taken = Math.max(0, taken);
     p.life -= taken;
     state2.run.lastHit = { raw, taken, type, isBig };
@@ -2539,7 +2728,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (run.packIndex === zone.packs) log(state2, "info", "The area falls quiet. The boss awaits.");
   }
   function automationUnlocked(state2, key) {
-    return state2.progress.cleared.includes(AUTOMATION[key].zone);
+    const A = AUTOMATION[key];
+    if (A.mapTier) return !!state2.mapProgress && state2.mapProgress.cleared.includes(A.mapTier);
+    return state2.progress.cleared.includes(A.zone);
   }
   function lootAction(state2, item) {
     const a = state2.automation || DEFAULT_AUTOMATION;
@@ -2593,6 +2784,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   function runComplete(state2) {
     const run = state2.run;
     const zoneId = run.zoneId;
+    if (run.map) return mapComplete(state2);
     finishRecord(state2, "cleared");
     log(state2, "clear", `${getZone(zoneId).name} cleared in ${Math.round(state2.time - run.record.start)}s.`);
     const firstClear = !state2.progress.cleared.includes(zoneId);
@@ -2606,8 +2798,77 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         log(state2, "clear", `First clear! ${getZone(zoneId + 1).name} is now open.`);
       }
     }
+    if (zoneId === ZONES[ZONES.length - 1].id && (firstClear || rng(state2).chance(MAP_RULES.zone10BossChance))) {
+      addMaps(state2, [makeMap(rng(state2), state2.nextUid++, 1)]);
+      if (firstClear) log(state2, "clear", "The Last Wall falls. A map drops: maps are the endgame. Open the Maps tab.");
+    }
     run.phase = "done";
     run.timer = RULES.runEndSeconds;
+  }
+  function mapComplete(state2) {
+    const run = state2.run;
+    const map = run.map;
+    finishRecord(state2, "cleared");
+    log(state2, "clear", `Tier ${map.tier} map cleared in ${Math.round(state2.time - run.record.start)}s.`);
+    const mp = state2.mapProgress;
+    if (!mp.cleared.includes(map.tier)) {
+      mp.cleared.push(map.tier);
+      mp.highest = Math.max(mp.highest, map.tier);
+      log(state2, "clear", `First clear of a tier ${map.tier} map!`);
+      if (MAP_RULES.bonusPointTiers.includes(map.tier)) log(state2, "level", "You gain 2 passive points.");
+      if (map.tier === AUTOMATION.mapRunner.mapTier) log(state2, "clear", "Map runner unlocked (Automation tab).");
+      grantSupport(state2);
+    }
+    const drops = rollMapDrops(rng(state2), map, mp.highest, newUid(state2));
+    addMaps(state2, drops);
+    if (drops.length) log(state2, "loot rare", `${drops.length} map${drops.length > 1 ? "s" : ""} dropped: tier ${drops.map((d) => d.tier).join(", ")}.`);
+    run.phase = "done";
+    run.timer = RULES.runEndSeconds;
+  }
+  function addMaps(state2, maps) {
+    for (const m of maps) {
+      if (state2.maps.length >= MAP_RULES.stashSize) {
+        log(state2, "warn", "Map stash full: a map was left behind.");
+        continue;
+      }
+      state2.maps.push(m);
+    }
+  }
+  function runMap(state2, uid) {
+    const idx = state2.maps.findIndex((m) => m.uid === uid);
+    if (idx < 0) return { ok: false, reason: "Map not found." };
+    const [map] = state2.maps.splice(idx, 1);
+    const area = mapArea(map);
+    registerArea(area);
+    startRun(state2, area.id);
+    state2.run.map = map;
+    log(state2, "info", `Entering ${area.name}${map.mods.length ? ` (${map.mods.join(", ")})` : ""}.`);
+    return { ok: true };
+  }
+  function pickRunnerMap(state2) {
+    if (!state2.maps.length) return null;
+    const allowed = state2.maps.filter((m) => m.tier <= state2.mapProgress.highest + 1);
+    if (!allowed.length) return null;
+    const order = state2.mapRunner.order === "lowest" ? 1 : -1;
+    return allowed.slice().sort((a, b) => order * (a.tier - b.tier))[0];
+  }
+  function setMapRunner(state2, patch) {
+    state2.mapRunner = { ...state2.mapRunner, ...patch };
+    return { ok: true };
+  }
+  function craftOnMap(state2, currencyId, uid) {
+    const map = state2.maps.find((m) => m.uid === uid);
+    if (!map) return { ok: false, reason: "Map not found." };
+    const res = craftMap(rng(state2), currencyId, map, state2.currency);
+    state2.rngState = rng(state2).getState();
+    return res;
+  }
+  function discardMap(state2, uid) {
+    const idx = state2.maps.findIndex((m) => m.uid === uid);
+    if (idx < 0) return { ok: false, reason: "Map not found." };
+    state2.maps.splice(idx, 1);
+    state2.scrap += 1;
+    return { ok: true };
   }
   function playerDied(state2, killer) {
     const run = state2.run;
@@ -2796,6 +3057,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   function passivePoints(state2) {
     let pts = state2.character.level - 1;
     for (const b of PASSIVE_RULES.bonusPoints) if (state2.progress.cleared.includes(b.zone)) pts += b.points;
+    for (const t of MAP_RULES.bonusPointTiers) if (state2.mapProgress && state2.mapProgress.cleared.includes(t)) pts += 2;
     return pts;
   }
   function passivesSpent(state2) {
@@ -2935,6 +3197,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   function deserialize(text) {
     const data = JSON.parse(text);
     const state2 = migrate(data);
+    if (state2.run && state2.run.map) registerArea(mapArea(state2.run.map));
     if (!state2.run || !getZone(state2.run.zoneId)) startRun(state2, state2.zoneId || 1);
     return state2;
   }
@@ -2942,6 +3205,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (!data || typeof data !== "object" || !data.version) throw new Error("Not a Wallbreaker save.");
     if (data.version > SAVE_VERSION) throw new Error("Save is from a newer version.");
     data.automation || (data.automation = { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] });
+    data.maps || (data.maps = []);
+    data.mapProgress || (data.mapProgress = { cleared: [], highest: 0 });
+    data.mapRunner || (data.mapRunner = { on: false, order: "highest" });
     if (data.version === 1) {
       data.character.skill = { id: data.character.skillId || "cleave", supports: [] };
       delete data.character.skillId;
@@ -2975,7 +3241,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return threat === "boss" ? "the boss" : `a ${THREATS[threat].name}`;
   }
   function diagnosisWindow(state2) {
-    const zoneId = state2.zoneId;
+    const zoneId = state2.run ? state2.run.zoneId : state2.zoneId;
     const finished = state2.runHistory.filter((r) => r.zoneId === zoneId);
     const lastN = finished.slice(-WINDOW_RUNS);
     const recent = finished.filter((r) => r.end >= state2.time - WINDOW_SECONDS);
@@ -3008,7 +3274,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   }
   function diagnose(state2, stats) {
     var _a;
-    const zone = ZONES.find((z) => z.id === state2.zoneId);
+    const zid = state2.run ? state2.run.zoneId : state2.zoneId;
+    const zone = areaById(zid);
     const runs = diagnosisWindow(state2);
     const causes = [];
     const deaths = runs.flatMap((r) => r.deaths);
@@ -3023,7 +3290,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       for (const d of deaths) if (counts[key(d)] > counts[key(best)]) best = d;
       const k = mainKiller(best);
       const n = counts[key(best)];
-      const detailStat = k.type === "physical" ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, state2.zoneId);
+      const detailStat = k.type === "physical" ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, zid);
       let message;
       if (k.threat === "blight") {
         message = `Rotted away by Blight: its stacks dealt ${fmt(k.taken)} chaos damage over your last ${RECENT_SECONDS} seconds. Your chaos resistance is ${fmt(stats.res.chaos)}% and you regenerate ${fmt(stats.lifeRegen)} life per second.`;
@@ -3050,7 +3317,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }
     if (worst) {
       const who = worst.threat === "boss" ? worst.isBig ? "The boss's heavy blows" : "Boss hits" : `${THREATS[worst.threat].name} ${worst.type === "physical" && worst.threat === "brute" ? "slams" : "hits"}`;
-      const tail = worst.type === "physical" ? `More armour or life would help. ${physLine(stats, worst.raw, zone)}` : resLine(stats, worst.type, state2.zoneId);
+      const tail = worst.type === "physical" ? `More armour or life would help. ${physLine(stats, worst.raw, zone)}` : resLine(stats, worst.type, zid);
       causes.push({
         state: "Fragile",
         score: 50 + worst.pct * 50,
@@ -3280,17 +3547,18 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }).join("");
   }
   function renderVitals(state2) {
+    const area = state2.run.zoneId;
     const s = getStats(state2);
     const ch = state2.character;
     const p = state2.player;
     const need = xpToNext(ch.level);
     const d = s.damage;
-    const zone = getZone(state2.zoneId);
-    const mh = maxHitTaken(s, state2.zoneId);
-    const bossLife = monsterBaseLife(zone.level) * THREATS.boss.lifeMult;
+    const zone = getZone(area);
+    const mh = maxHitTaken(s, area);
+    const bossLife = monsterBaseLife(zone.level) * THREATS.boss.lifeMult * (zone.lifeMult || 1) * (zone.champion ? 1.5 : 1);
     const ttk = bossLife / Math.max(1, d.dps);
     const resRow = (t) => {
-      const eff = effectiveRes(s, t, state2.zoneId);
+      const eff = effectiveRes(s, t, area);
       const low = eff < 0 ? "neg" : eff < 30 ? "low" : "";
       return `<div class="kv"><span>${dt(t)} res</span><b class="${low}">${fmt2(eff)}% <span class="muted">/ ${s.maxRes[t]}%</span></b></div>`;
     };
@@ -3299,7 +3567,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     ${bar("xp", ch.xp, need, "")}
     ${bar("life", Math.max(0, p.life), s.life, `Life ${fmt2(Math.max(0, p.life))} / ${fmt2(s.life)}`)}
     ${bar("mana", p.mana, s.mana, `Mana ${fmt2(p.mana)} / ${fmt2(s.mana)}`)}
-    ${p.blight && p.blight.length ? `<div class="blight small">Blight \xD7${p.blight.length}: losing ${fmt2(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, "chaos", state2.zoneId) / 100))} life per second</div>` : ""}
+    ${p.blight && p.blight.length ? `<div class="blight small">Blight \xD7${p.blight.length}: losing ${fmt2(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, "chaos", area) / 100))} life per second</div>` : ""}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? "s" : ""}` : ""}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)}</b></div>
@@ -3357,7 +3625,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     let body;
     if (!d.stalled) {
       body = `<div class="diag-badge ok">Progressing</div>
-      <p class="muted">No stall in ${esc(getZone(state2.zoneId).name)} over your last ${d.runsConsidered} run${d.runsConsidered === 1 ? "" : "s"}. When the character gets stuck, the cause shows here.</p>`;
+      <p class="muted">No stall in ${esc(getZone(state2.run.zoneId).name)} over your last ${d.runsConsidered} run${d.runsConsidered === 1 ? "" : "s"}. When the character gets stuck, the cause shows here.</p>`;
     } else {
       const p = d.primary;
       body = `<div class="diag-badge stalled">Stalled \xB7 ${p.state}</div>
@@ -3366,7 +3634,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       ${d.secondary.map((c) => `<div class="cause"><div class="cause-state">${c.state}</div><p>${esc(c.message)}</p><p class="lookat">Look at: <b>${esc(c.lookAt)}</b></p></div>`).join("")}`;
     }
     const recent = state2.runHistory.slice(-8).reverse();
-    const runs = recent.length ? `<ul class="runs">${recent.map((r) => `<li><span class="zone-tag">Z${r.zoneId}</span><span class="${r.outcome === "died" ? "neg" : "good"}">${r.outcome === "died" ? "Died" : "Cleared"}</span><span class="muted">${r.outcome === "died" ? `pack ${Math.min(r.packs.length + 1, 10)}${r.bossStart != null ? " (boss)" : ""}` : `${Math.round(r.end - r.start)}s`}</span><span class="muted">+${r.items} items</span></li>`).join("")}</ul>` : '<p class="muted small">No finished runs yet.</p>';
+    const runs = recent.length ? `<ul class="runs">${recent.map((r) => `<li><span class="zone-tag">${typeof r.zoneId === "number" ? `Z${r.zoneId}` : "Map"}</span><span class="${r.outcome === "died" ? "neg" : "good"}">${r.outcome === "died" ? "Died" : "Cleared"}</span><span class="muted">${r.outcome === "died" ? `pack ${Math.min(r.packs.length + 1, 10)}${r.bossStart != null ? " (boss)" : ""}` : `${Math.round(r.end - r.start)}s`}</span><span class="muted">+${r.items} items</span></li>`).join("")}</ul>` : '<p class="muted small">No finished runs yet.</p>';
     return `${body}<h3>Recent runs</h3>${runs}
     <p class="muted small totals">${fmt2(state2.lifetime.kills)} kills \xB7 ${fmt2(state2.lifetime.deaths)} deaths \xB7 ${fmt2(state2.lifetime.runs)} runs</p>`;
   }
@@ -3774,11 +4042,71 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       ${auto ? `<p class="muted small">Your rules salvaged ${auto} items over the last ${last2.length} runs.</p>` : ""}</section>
     <section><h3>Coming later</h3>
       <ul class="small muted tree-help">
-        <li><b>Map runner</b>: runs maps from a queue (needs maps).</li>
+        ${automationUnlocked(state2, "mapRunner") ? "" : `<li><b>Map runner</b>: runs maps from your stash automatically (first clear of a tier ${AUTOMATION.mapRunner.mapTier} map).</li>`}
         <li><b>Craft rules</b>: repeat a currency until a mod appears, with a spending limit (after your first league reset).</li>
         <li><b>Upgrade advisor</b>: flags drops that would raise your damage or survivability (after your second league reset).</li>
       </ul>
       <p class="muted small">Salvaged items become Scrap, which the Smith and passive refunds use.</p></section>
+  </div>`;
+  }
+  function mapRow(m, selected) {
+    const L2 = MAP_LAYOUTS[m.layout];
+    const iiq = mapIiq(m);
+    return `<button class="inv-row ${selected ? "selected" : ""}" data-action="select-map" data-uid="${m.uid}">
+    <span class="r-${m.rarity} inv-name">Tier ${m.tier} \xB7 ${esc(L2.name)}</span>
+    <span class="muted small">${cap2(m.rarity)}${iiq ? ` \xB7 +${iiq}% items` : ""}</span>
+    <span class="inv-mods small">${m.mods.map((id) => MAP_MODS[id].name).join(" \xB7 ") || '<span class="muted">no mods</span>'}</span></button>`;
+  }
+  function renderMaps(state2, ui2) {
+    const mp = state2.mapProgress;
+    if (!state2.maps.length && !mp.cleared.length && !state2.progress.cleared.includes(10)) {
+      return `<div class="help"><p>Maps are the endgame. The boss of zone 10 drops your first map; each map you clear can drop more.</p>
+      <ul class="small muted tree-help">
+        <li>Map tiers go from 1 to ${MAP_RULES.maxTier}. Monster level is ${mapLevel(1)} at tier 1 and rises by ${MAP_RULES.levelPerTier} per tier.</li>
+        <li>Your elemental resistances are ${MAP_RULES.resPenalty}% lower in maps, and monsters resist elements more each tier.</li>
+        <li>Map mods make a map harder but raise how many items drop.</li>
+        <li>First clears of tiers ${MAP_RULES.bonusPointTiers.join(", ")} give 2 passive points each.</li>
+      </ul></div>`;
+    }
+    const sel = state2.maps.find((m) => m.uid === ui2.selectedMap) || null;
+    const list = state2.maps.slice().sort((a, b) => b.tier - a.tier || b.uid - a.uid);
+    const tiers2 = Array.from({ length: MAP_RULES.maxTier }, (_, i) => i + 1).map((t) => {
+      const done = mp.cleared.includes(t);
+      const bonus = MAP_RULES.bonusPointTiers.includes(t);
+      return `<span class="tier-cell ${done ? "done" : ""}" title="Tier ${t}${done ? ": cleared" : ""}${bonus ? " \xB7 2 passive points on first clear" : ""}">${t}${bonus ? "<i>+2</i>" : ""}</span>`;
+    }).join("");
+    let detail = '<p class="muted">Select a map to see its monsters, mods and rewards, then run it. Running a map uses it up, whether you clear it or die.</p>';
+    if (sel) {
+      const L2 = MAP_LAYOUTS[sel.layout];
+      const total = L2.mix.reduce((a, m) => a + m.weight, 0);
+      const mix = (sel.mods.includes("teeming") ? [{ threat: "swarm", weight: 1 }] : L2.mix).map((m) => `${THREATS[m.threat].name}${m.element ? ` (${m.element})` : ""} ${sel.mods.includes("teeming") ? 100 : Math.round(m.weight / total * 100)}%`).join(" \xB7 ");
+      const locked = sel.tier > mp.highest + 1;
+      const crafts = ["kindling", "tempest", "forge", "wildfire", "crown", "ash"].map((c) => {
+        const reason = canCraftMap(c, sel, state2.currency);
+        return `<button class="cur-btn" data-action="craft-map" data-cur="${c}" data-uid="${sel.uid}" ${reason ? "disabled" : ""} title="${esc(reason || "")}"><span>${CURRENCY[c].name}</span><span class="count">${state2.currency[c]}</span></button>`;
+      }).join("");
+      detail = `<div class="item-card r-${sel.rarity}">
+        <div class="item-name">${esc(L2.name)}</div>
+        <div class="item-sub">${cap2(sel.rarity)} map \xB7 tier ${sel.tier} \xB7 monster level ${mapLevel(sel.tier)} \xB7 monsters resist elements ${MAP_RULES.eleRes(sel.tier)}%</div>
+        <div class="item-base">${mix}</div>
+        <div class="item-base">Boss: ${esc(L2.boss.name)} (${L2.boss.damageType})</div>
+        <ul class="mods">${sel.mods.map((id) => `<li><b>${MAP_MODS[id].name}</b>&nbsp;${esc(MAP_MODS[id].text)} <span class="muted small">+${MAP_MODS[id].iiq}% items</span></li>`).join("") || '<li class="muted">No mods. Kindling or Forge adds some: harder, but more loot.</li>'}</ul>
+      </div>
+      <div class="actions"><button class="primary" data-action="run-map" data-uid="${sel.uid}" ${locked ? "disabled" : ""}>Run this map</button><button data-action="discard-map" data-uid="${sel.uid}">Discard (+1 Scrap)</button></div>
+      ${locked ? `<p class="muted small">Clear a tier ${sel.tier - 1} map first.</p>` : ""}
+      <h4>Craft this map</h4><div class="cur-grid">${crafts}</div>`;
+    }
+    const runner = automationUnlocked(state2, "mapRunner") ? `<div class="runner"><label class="check"><input type="checkbox" id="map-runner" data-change="map-runner" ${state2.mapRunner.on ? "checked" : ""}> Map runner: run maps from the stash automatically</label>
+       <label class="small">Order <select id="map-order" data-change="map-order"><option value="highest" ${state2.mapRunner.order === "highest" ? "selected" : ""}>Highest tier first</option><option value="lowest" ${state2.mapRunner.order === "lowest" ? "selected" : ""}>Lowest tier first</option></select></label></div>` : `<p class="muted small">Map runner unlocks on your first tier ${AUTOMATION.mapRunner.mapTier} clear.</p>`;
+    const inMap = state2.run.map ? `<p class="small good">Running ${esc(getZone(state2.run.zoneId).name)} now.</p>` : "";
+    return `<div class="gear-grid">
+    <section class="gear-left">
+      <h3>Tiers cleared</h3><div class="tier-grid">${tiers2}</div>
+      ${inMap}${runner}
+      <h3>Map stash <span class="muted small">${state2.maps.length} / ${MAP_RULES.stashSize}</span></h3>
+      <div class="inv">${list.map((m) => mapRow(m, sel === m)).join("") || '<p class="muted small empty">No maps. Clear zone 10 or a map to find more.</p>'}</div>
+    </section>
+    <section class="gear-right">${detail}</section>
   </div>`;
   }
 
@@ -3861,7 +4189,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     for (const p of document.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== ui.tab;
     const free = passivePoints(state) - passivesSpent(state);
     put("tree-count", free > 0 ? String(free) : "");
-    const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(",")}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}`;
+    const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(",")}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}|${state.maps.length}|${state.run.zoneId}|${state.mapProgress.cleared.length}`;
     if (!force && sig === lowerSig) return;
     lowerSig = sig;
     if (ui.tab === "gear") {
@@ -3881,6 +4209,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
       const inv2 = document.querySelector(".inv");
       if (inv2) inv2.scrollTop = scroll;
+    } else if (ui.tab === "maps") {
+      put("maps", renderMaps(state, ui));
     } else if (ui.tab === "auto") {
       put("auto", renderAutomation(state));
     } else if (ui.tab === "tree") {
@@ -4030,6 +4360,30 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         setAutomation(state, { keepTypes: [...set] });
         break;
       }
+      case "select-map":
+        ui.selectedMap = uid;
+        break;
+      case "run-map":
+        res = runMap(state, uid);
+        if (res.ok) {
+          ui.selectedMap = null;
+          notify("Map opened.", "good");
+        }
+        break;
+      case "craft-map":
+        res = craftOnMap(state, el.dataset.cur, uid);
+        if (res.ok) notify(`Used ${CURRENCY[el.dataset.cur].name} on the map.`, "good");
+        break;
+      case "discard-map":
+        res = discardMap(state, uid);
+        if (res.ok) ui.selectedMap = null;
+        break;
+      case "map-runner":
+        setMapRunner(state, { on: el.checked });
+        break;
+      case "map-order":
+        setMapRunner(state, { order: el.value });
+        break;
       case "offline-close":
         $("offline").hidden = true;
         break;
