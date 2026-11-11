@@ -2,7 +2,7 @@
 
 import { ZONES } from '../data/zones.js';
 import { THREATS } from '../data/monsters.js';
-import { BASES, MODS, SLOTS, SLOT_NAMES } from '../data/items.js';
+import { BASES, MODS, SLOT_NAMES, EQUIP_SLOTS, ITEM_TYPES, slotsForType } from '../data/items.js';
 import { CURRENCY, CURRENCY_ORDER, CONVERSIONS } from '../data/currency.js';
 import { RULES } from '../data/player.js';
 import {
@@ -192,7 +192,7 @@ function itemCard(item, { equippedIn = null } = {}) {
   }).join('');
   return `<div class="item-card r-${item.rarity}">
     <div class="item-name">${esc(itemTitle(item))}${item.locked ? ' <span class="lock" title="Locked: bulk salvage skips it">locked</span>' : ''}</div>
-    <div class="item-sub">${cap(item.rarity)} ${esc(b.name)} · ${SLOT_NAMES[b.slot]} · item level ${item.ilvl}${equippedIn ? ' · <b>equipped</b>' : ''}</div>
+    <div class="item-sub">${cap(item.rarity)} ${esc(b.name)} · ${SLOT_NAMES[b.slot]} · item level ${item.ilvl}${equippedIn ? ` · <b>equipped as ${SLOT_NAMES[equippedIn]}</b>` : ''}</div>
     <div class="item-base">${esc(baseLine(item))}</div>
     ${lines ? `<ul class="mods">${lines}</ul>` : '<div class="muted small">No mods.</div>'}
   </div>`;
@@ -244,38 +244,102 @@ function craftPanel(state, item) {
   return `<div class="craft"><h4>Crafting</h4><div class="cur-grid">${buttons}</div>${smith}</div>`;
 }
 
+// What equipping `item` would change, as a few short chips, plus a sort score.
+function changeSummary(state, cur, item) {
+  const slots = slotsForType(BASES[item.baseId].slot);
+  let best = null;
+  for (const slot of slots) {
+    const alt = statsWithItem(state, item, slot);
+    const dps = cur.damage.dps > 0 ? alt.damage.dps / cur.damage.dps - 1 : 0;
+    const life = alt.life - cur.life;
+    const resSum = (x) => ['fire', 'cold', 'lightning', 'chaos'].reduce((a, t) => a + Math.min(x.res[t], x.maxRes[t]), 0);
+    const res = resSum(alt) - resSum(cur);
+    const def = (alt.armour + alt.evasion) - (cur.armour + cur.evasion);
+    const score = dps + life / Math.max(1, cur.life) + res / 150 + def / (cur.armour + cur.evasion + 300);
+    if (!best || score > best.score) best = { slot, dps, life, res, def, score };
+  }
+  const chips = [];
+  if (Math.abs(best.dps) >= 0.01) chips.push([Math.abs(best.dps) * 3, `${best.dps > 0 ? '+' : '−'}${Math.round(Math.abs(best.dps) * 100)}% DPS`, best.dps > 0]);
+  if (Math.abs(best.life) >= 1) chips.push([Math.abs(best.life) / Math.max(1, cur.life) * 3, `${best.life > 0 ? '+' : '−'}${fmt(Math.abs(best.life))} life`, best.life > 0]);
+  if (Math.abs(best.res) >= 1) chips.push([Math.abs(best.res) / 50, `${best.res > 0 ? '+' : '−'}${fmt(Math.abs(best.res))}% res`, best.res > 0]);
+  if (Math.abs(best.def) >= 1) chips.push([Math.abs(best.def) / (cur.armour + cur.evasion + 300), `${best.def > 0 ? '+' : '−'}${fmt(Math.abs(best.def))} def`, best.def > 0]);
+  chips.sort((a, b) => b[0] - a[0]);
+  return { ...best, chips: chips.slice(0, 3).map(([, t, good]) => `<span class="chg ${good ? 'up' : 'down'}">${t}</span>`).join('') };
+}
+
+const RARITY_RANK = { normal: 0, magic: 1, rare: 2 };
+
 export function renderGear(state, ui) {
   const sel = ui.selectedUid != null ? findItem(state, ui.selectedUid) : null;
-  const equipped = SLOTS.map((slot) => {
+  const cur = getStats(state);
+  const equipped = EQUIP_SLOTS.map((slot) => {
     const it = state.character.equipment[slot];
     return `<button class="slot ${sel && sel.item === it ? 'selected' : ''}" data-action="select" data-uid="${it ? it.uid : ''}" ${it ? '' : 'disabled'}>
       <span class="slot-name">${SLOT_NAMES[slot]}</span>
-      ${it ? `<span class="slot-item r-${it.rarity}">${esc(itemTitle(it))}</span><span class="muted small">${esc(BASES[it.baseId].name)} · ${it.mods.length} mod${it.mods.length === 1 ? '' : 's'}</span>` : '<span class="muted">Empty</span>'}
+      ${it ? `<span class="slot-item r-${it.rarity}">${esc(itemTitle(it))}</span><span class="muted small">${esc(BASES[it.baseId].name)} · ${it.mods.length} mod${it.mods.length === 1 ? '' : 's'}</span>` : '<span class="muted small">Empty</span>'}
     </button>`;
   }).join('');
 
   const conv = CONVERSIONS.map((c, i) => `<button class="small-btn" data-action="convert" data-idx="${i}" ${(state.currency[c.from] || 0) < c.amount ? 'disabled' : ''}>${c.amount} ${CURRENCY[c.from].name} → 1 ${CURRENCY[c.to].name}</button>`).join('');
   const wallet = `<div class="wallet">${CURRENCY_ORDER.map((c) => `<span class="coin"><b>${state.currency[c]}</b> ${CURRENCY[c].name}</span>`).join('')}<span class="coin scrap"><b>${fmt(state.scrap)}</b> Scrap</span></div><div class="conv">${conv}</div>`;
 
+  // Inventory: filter, search, sort.
   const filter = ui.filter || 'all';
-  const list = state.inventory.filter((it) => filter === 'all' || BASES[it.baseId].slot === filter).slice().reverse();
-  const filters = ['all', ...SLOTS].map((f) => `<button class="tab-chip ${filter === f ? 'on' : ''}" data-action="filter" data-filter="${f}" aria-pressed="${filter === f}">${f === 'all' ? 'All' : SLOT_NAMES[f]}</button>`).join('');
-  const rows = list.length
-    ? list.map((it) => `<button class="inv-row ${sel && sel.item === it ? 'selected' : ''}" data-action="select" data-uid="${it.uid}">
-        <span class="r-${it.rarity} inv-name">${esc(itemTitle(it))}${it.locked ? ' <span class="lock">locked</span>' : ''}</span>
-        <span class="muted small">${esc(BASES[it.baseId].name)} · ilvl ${it.ilvl}</span>
-        <span class="inv-mods small">${it.mods.map((m) => esc(modText(m))).join(' · ') || '<span class="muted">no mods</span>'}</span></button>`).join('')
-    : '<p class="muted small empty">No items here yet. Items drop from monsters and are picked up when a pack dies.</p>';
+  const rarity = ui.rarity || 'all';
+  const sort = ui.sort || 'new';
+  const q = (ui.search || '').trim().toLowerCase();
+  let list = state.inventory.map((it, idx) => ({ it, idx }))
+    .filter(({ it }) => filter === 'all' || BASES[it.baseId].slot === filter)
+    .filter(({ it }) => rarity === 'all' || it.rarity === rarity)
+    .filter(({ it }) => !q || `${itemTitle(it)} ${BASES[it.baseId].name} ${baseLine(it)} ${it.mods.map(modText).join(' ')}`.toLowerCase().includes(q));
+  list = list.map((e) => ({ ...e, ch: changeSummary(state, cur, e.it) }));
+  const sorters = {
+    new: (a, b) => b.idx - a.idx,
+    upgrade: (a, b) => b.ch.score - a.ch.score,
+    rarity: (a, b) => RARITY_RANK[b.it.rarity] - RARITY_RANK[a.it.rarity] || b.it.ilvl - a.it.ilvl,
+    ilvl: (a, b) => b.it.ilvl - a.it.ilvl || b.idx - a.idx,
+    type: (a, b) => ITEM_TYPES.indexOf(BASES[a.it.baseId].slot) - ITEM_TYPES.indexOf(BASES[b.it.baseId].slot) || b.idx - a.idx,
+  };
+  list.sort(sorters[sort] || sorters.new);
 
-  let detail = '<p class="muted">Select an item to inspect, compare and craft it. You can craft on equipped items too.</p>';
+  const counts = {};
+  for (const it of state.inventory) counts[BASES[it.baseId].slot] = (counts[BASES[it.baseId].slot] || 0) + 1;
+  const filters = ['all', ...ITEM_TYPES].map((f) => `<button class="tab-chip ${filter === f ? 'on' : ''}" data-action="filter" data-filter="${f}" aria-pressed="${filter === f}">${f === 'all' ? 'All' : SLOT_NAMES[f]}${f !== 'all' && counts[f] ? ` <span class="muted">${counts[f]}</span>` : ''}</button>`).join('');
+  const opt = (v, label, curV) => `<option value="${v}" ${curV === v ? 'selected' : ''}>${label}</option>`;
+  const controls = `<div class="inv-controls">
+      <input id="inv-search" type="search" placeholder="Search mods, e.g. fire res" value="${esc(ui.search || '')}" data-input="search" aria-label="Search inventory">
+      <select id="inv-rarity" data-change="rarity" aria-label="Rarity">${opt('all', 'All rarities', rarity)}${opt('rare', 'Rare', rarity)}${opt('magic', 'Magic', rarity)}${opt('normal', 'Normal', rarity)}</select>
+      <select id="inv-sort" data-change="sort" aria-label="Sort">${opt('new', 'Newest', sort)}${opt('upgrade', 'Best upgrade', sort)}${opt('rarity', 'Rarity', sort)}${opt('ilvl', 'Item level', sort)}${opt('type', 'Type', sort)}</select>
+    </div>`;
+  const rows = list.length
+    ? list.map(({ it, ch }) => `<button class="inv-row ${sel && sel.item === it ? 'selected' : ''}" data-action="select" data-uid="${it.uid}">
+        <span class="r-${it.rarity} inv-name">${esc(itemTitle(it))}${it.locked ? ' <span class="lock">locked</span>' : ''}</span>
+        <span class="muted small">${SLOT_NAMES[BASES[it.baseId].slot]} · ilvl ${it.ilvl}</span>
+        <span class="inv-mods small">${it.mods.map((m) => esc(modText(m))).join(' · ') || `<span class="muted">${esc(BASES[it.baseId].name)}, no mods</span>`}</span>
+        <span class="chgs">${ch.chips || '<span class="muted small">no change</span>'}</span></button>`).join('')
+    : `<p class="muted small empty">${state.inventory.length ? 'Nothing matches these filters.' : 'No items yet. Items drop from monsters and are picked up when a pack dies.'}</p>`;
+
+  let detail = '<p class="muted">Select an item to inspect, compare and craft it. You can craft on equipped items too.</p><p class="muted small">The chips on each item show what equipping it would change. For rings, they compare against whichever ring it would replace best.</p>';
   if (sel) {
     const item = sel.item;
     const isEq = sel.where !== 'inventory';
-    const actions = isEq
-      ? `<button data-action="unequip" data-slot="${sel.where}">Unequip</button>`
-      : `<button class="primary" data-action="equip" data-uid="${item.uid}">Equip</button>
-         <button data-action="salvage" data-uid="${item.uid}">Salvage (+${salvageValue(item)} Scrap)</button>`;
-    const compare = isEq ? '' : compareRows(getStats(state), statsWithItem(state, item), state.zoneId);
+    const type = BASES[item.baseId].slot;
+    let actions;
+    let compare = '';
+    if (isEq) {
+      actions = `<button data-action="unequip" data-slot="${sel.where}">Unequip</button>`;
+    } else {
+      const slots = slotsForType(type);
+      const target = slots.includes(ui.compareSlot) ? ui.compareSlot : changeSummary(state, cur, item).slot;
+      actions = slots.map((sl) => {
+        const occupant = state.character.equipment[sl];
+        const label = slots.length > 1 ? `Equip as ${SLOT_NAMES[sl]}` : 'Equip';
+        return `<button class="${sl === target ? 'primary' : ''}" data-action="equip" data-uid="${item.uid}" data-slot="${sl}" title="${occupant ? `Replaces ${esc(itemTitle(occupant))}` : 'Slot is empty'}">${label}</button>`;
+      }).join('') + `<button data-action="salvage" data-uid="${item.uid}">Salvage (+${salvageValue(item)} Scrap)</button>`;
+      const tabs = slots.length > 1
+        ? `<div class="cmp-tabs">${slots.map((sl) => `<button class="tab-chip ${sl === target ? 'on' : ''}" data-action="compare-slot" data-slot="${sl}">vs ${SLOT_NAMES[sl]}${state.character.equipment[sl] ? '' : ' (empty)'}</button>`).join('')}</div>` : '';
+      compare = tabs + compareRows(cur, statsWithItem(state, item, target), state.zoneId, slots.length > 1 ? `If equipped as ${SLOT_NAMES[target]}` : 'If equipped');
+    }
     detail = `${itemCard(item, { equippedIn: isEq ? sel.where : null })}
       <div class="actions">${actions}<button data-action="lock" data-uid="${item.uid}">${item.locked ? 'Unlock' : 'Lock'}</button></div>
       ${compare}${craftPanel(state, item)}`;
@@ -285,9 +349,10 @@ export function renderGear(state, ui) {
     <section class="gear-left">
       <h3>Equipped</h3><div class="slots">${equipped}</div>
       <h3>Currency</h3>${wallet}
-      <h3>Inventory <span class="muted small">${state.inventory.length} / ${RULES.inventorySize}</span></h3>
-      <div class="inv-tools"><div class="filters">${filters}</div>
-        <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button></div></div>
+      <h3>Inventory <span class="muted small">${state.inventory.length} / ${RULES.inventorySize}${list.length !== state.inventory.length ? ` · showing ${list.length}` : ''}</span></h3>
+      <div class="filters">${filters}</div>
+      ${controls}
+      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Locked items are skipped.</span></div>
       <div class="inv">${rows}</div>
     </section>
     <section class="gear-right">${detail}</section>

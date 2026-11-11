@@ -11,7 +11,7 @@ import {
 import { PASSIVES } from '../src/data/passives.js';
 import { supportFits } from '../src/data/skills.js';
 import { diagnose } from '../src/diagnosis.js';
-import { BASES } from '../src/data/items.js';
+import { BASES, slotsForType } from '../src/data/items.js';
 import { smithOptions } from '../src/crafting.js';
 
 const minutes = Number(process.argv[2] || 30);
@@ -52,11 +52,13 @@ function upgrade(state) {
     const cur = score(getStats(state));
     let best = null;
     for (const it of state.inventory) {
-      const sc = score(statsWithItem(state, it));
-      if (sc > cur * 1.01 && (!best || sc > best.sc)) best = { it, sc };
+      for (const slot of slotsForType(BASES[it.baseId].slot)) {
+        const sc = score(statsWithItem(state, it, slot));
+        if (sc > cur * 1.01 && (!best || sc > best.sc)) best = { it, sc, slot };
+      }
     }
     if (best) {
-      equip(state, best.it.uid);
+      equip(state, best.it.uid, best.slot);
       changed = true;
     }
   }
@@ -64,7 +66,7 @@ function upgrade(state) {
 
 function craftFire(state) {
   // Use the Smith to add fire res to the ring or body when possible.
-  for (const slot of ['ring', 'body']) {
+  for (const slot of ['ring1', 'ring2', 'body', 'helmet', 'boots', 'gloves']) {
     const it = state.character.equipment[slot];
     if (!it) continue;
     if (it.mods.some((m) => m.family === 'fire_res')) continue;
@@ -72,7 +74,7 @@ function craftFire(state) {
     if (opt && state.scrap >= opt.cost) smithItem(state, it.uid, 'fire_res');
   }
   // Roll Kindling/Tempest on the ring for fire res.
-  const ring = state.character.equipment.ring;
+  const ring = state.character.equipment.ring1;
   if (ring && !ring.mods.some((m) => m.family === 'fire_res')) {
     if (ring.rarity === 'normal' && state.currency.kindling > 0) craftItem(state, 'kindling', ring.uid);
     while (ring.rarity === 'magic' && !ring.mods.some((m) => m.family === 'fire_res') && state.currency.tempest > 0) {

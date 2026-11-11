@@ -187,7 +187,16 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brass); }
 
 .gear-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
-.slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.inv-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.inv-controls input { flex: 1 1 180px; min-width: 0; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 8px; }
+.bulk { margin-bottom: 6px; align-items: center; }
+.chgs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+.chg { font-size: 0.72rem; font-family: var(--f-mono); padding: 0 5px; border-radius: 3px; border: 1px solid; }
+.chg.up { color: var(--good); border-color: #3d5a3b; }
+.chg.down { color: var(--neg); border-color: #7c3a32; }
+.cmp-tabs { display: flex; gap: 4px; margin-top: 4px; }
+.filters { margin-bottom: 4px; }
 .slot { display: grid; text-align: left; gap: 2px; padding: 8px; min-width: 0; }
 .slot-name { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .slot-item { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -199,7 +208,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .coin b { font-family: var(--f-mono); color: var(--brass); }
 .conv { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .small-btn { font-size: 0.8rem; padding: 4px 8px; }
-.inv-tools { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+
 .filters, .bulk { display: flex; flex-wrap: wrap; gap: 4px; }
 .tab-chip { font-size: 0.8rem; padding: 3px 9px; border-radius: 999px; }
 .tab-chip.on { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
@@ -306,7 +315,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   .board .diag { order: -1; }
   .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .zone { padding: 6px 8px; }
-  .slots { grid-template-columns: minmax(0, 1fr); }
+  .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wordmark { font-size: 1.4rem; }
   .log { max-height: 180px; }
 }
@@ -421,7 +430,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     travelSeconds: 1.5,
     // Pause after a run ends before the next one starts.
     runEndSeconds: 2,
-    inventorySize: 60,
+    inventorySize: 120,
     combatLogSize: 150,
     runHistorySize: 30
   };
@@ -573,8 +582,23 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   }
 
   // src/data/items.js
-  var SLOTS = ["weapon", "body", "ring"];
-  var SLOT_NAMES = { weapon: "Weapon", body: "Body Armour", ring: "Ring" };
+  var ITEM_TYPES = ["weapon", "helmet", "body", "gloves", "boots", "amulet", "ring"];
+  var EQUIP_SLOTS = ["weapon", "helmet", "body", "gloves", "boots", "amulet", "ring1", "ring2"];
+  var SLOT_NAMES = {
+    weapon: "Weapon",
+    helmet: "Helmet",
+    body: "Body Armour",
+    gloves: "Gloves",
+    boots: "Boots",
+    amulet: "Amulet",
+    ring: "Ring",
+    ring1: "Ring 1",
+    ring2: "Ring 2"
+  };
+  function slotsForType(type) {
+    return type === "ring" ? ["ring1", "ring2"] : [type];
+  }
+  var I = (stat, value, kind = "flat") => ({ stat, kind, value });
   var BASES = {
     // Weapons: damage range, attacks per second, base crit chance %.
     rusted_blade: { slot: "weapon", name: "Rusted Blade", ilvl: 1, damage: [3, 7], aps: 1.3, crit: 5 },
@@ -585,27 +609,69 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     war_cleaver: { slot: "weapon", name: "War Cleaver", ilvl: 16, damage: [15, 30], aps: 1.15, crit: 5 },
     headsman_blade: { slot: "weapon", name: "Headsman's Blade", ilvl: 21, damage: [20, 40], aps: 1.1, crit: 6 },
     needle_rapier: { slot: "weapon", name: "Needle Rapier", ilvl: 21, damage: [14, 26], aps: 1.55, crit: 7 },
-    // Body armour: implicit defences.
-    leather_vest: { slot: "body", name: "Leather Vest", ilvl: 1, implicits: [{ stat: "evasion", kind: "flat", value: 20 }] },
-    iron_plate: { slot: "body", name: "Iron Plate", ilvl: 1, implicits: [{ stat: "armour", kind: "flat", value: 20 }] },
-    studded_jerkin: { slot: "body", name: "Studded Jerkin", ilvl: 9, implicits: [{ stat: "evasion", kind: "flat", value: 60 }] },
-    scale_mail: { slot: "body", name: "Scale Mail", ilvl: 9, implicits: [{ stat: "armour", kind: "flat", value: 60 }] },
-    hide_coat: { slot: "body", name: "Hide Coat", ilvl: 18, implicits: [{ stat: "evasion", kind: "flat", value: 120 }] },
-    plate_hauberk: { slot: "body", name: "Plate Hauberk", ilvl: 18, implicits: [{ stat: "armour", kind: "flat", value: 120 }] },
+    war_maul: { slot: "weapon", name: "War Maul", ilvl: 30, damage: [30, 58], aps: 1.05, crit: 5 },
+    royal_sabre: { slot: "weapon", name: "Royal Sabre", ilvl: 30, damage: [22, 40], aps: 1.4, crit: 6 },
+    ember_greatblade: { slot: "weapon", name: "Ember Greatblade", ilvl: 40, damage: [40, 72], aps: 1.1, crit: 6 },
+    whisper_rapier: { slot: "weapon", name: "Whisper Rapier", ilvl: 40, damage: [30, 52], aps: 1.5, crit: 7 },
+    // Wands: weak hits, but boost spells.
+    ash_wand: { slot: "weapon", name: "Ash Wand", ilvl: 1, damage: [2, 5], aps: 1.4, crit: 7, implicits: [I("spell", 10, "increased")] },
+    bone_wand: { slot: "weapon", name: "Bone Wand", ilvl: 15, damage: [4, 9], aps: 1.4, crit: 7, implicits: [I("spell", 18, "increased")] },
+    runed_wand: { slot: "weapon", name: "Runed Wand", ilvl: 30, damage: [6, 13], aps: 1.4, crit: 7, implicits: [I("spell", 26, "increased")] },
+    void_sceptre: { slot: "weapon", name: "Void Sceptre", ilvl: 42, damage: [9, 18], aps: 1.3, crit: 7, implicits: [I("spell", 34, "increased")] },
+    // Body armour
+    leather_vest: { slot: "body", name: "Leather Vest", ilvl: 1, implicits: [I("evasion", 20)] },
+    iron_plate: { slot: "body", name: "Iron Plate", ilvl: 1, implicits: [I("armour", 20)] },
+    studded_jerkin: { slot: "body", name: "Studded Jerkin", ilvl: 9, implicits: [I("evasion", 60)] },
+    scale_mail: { slot: "body", name: "Scale Mail", ilvl: 9, implicits: [I("armour", 60)] },
+    hide_coat: { slot: "body", name: "Hide Coat", ilvl: 18, implicits: [I("evasion", 120)] },
+    plate_hauberk: { slot: "body", name: "Plate Hauberk", ilvl: 18, implicits: [I("armour", 120)] },
+    warden_brigandine: { slot: "body", name: "Warden Brigandine", ilvl: 28, implicits: [I("armour", 110), I("evasion", 110)] },
+    knight_plate: { slot: "body", name: "Knight Plate", ilvl: 34, implicits: [I("armour", 220)] },
+    shadow_garb: { slot: "body", name: "Shadow Garb", ilvl: 34, implicits: [I("evasion", 220)] },
+    // Helmets
+    leather_cap: { slot: "helmet", name: "Leather Cap", ilvl: 1, implicits: [I("evasion", 10)] },
+    iron_helm: { slot: "helmet", name: "Iron Helm", ilvl: 1, implicits: [I("armour", 10)] },
+    sage_circlet: { slot: "helmet", name: "Sage Circlet", ilvl: 12, implicits: [I("mana", 20)] },
+    hunter_hood: { slot: "helmet", name: "Hunter Hood", ilvl: 20, implicits: [I("evasion", 50)] },
+    visored_helm: { slot: "helmet", name: "Visored Helm", ilvl: 20, implicits: [I("armour", 50)] },
+    crowned_helm: { slot: "helmet", name: "Crowned Helm", ilvl: 36, implicits: [I("armour", 60), I("evasion", 60)] },
+    // Gloves
+    wrapped_mitts: { slot: "gloves", name: "Wrapped Mitts", ilvl: 1, implicits: [I("evasion", 8)] },
+    iron_gauntlets: { slot: "gloves", name: "Iron Gauntlets", ilvl: 1, implicits: [I("armour", 8)] },
+    spellweave_gloves: { slot: "gloves", name: "Spellweave Gloves", ilvl: 14, implicits: [I("castSpeed", 5, "increased")] },
+    studded_gloves: { slot: "gloves", name: "Studded Gloves", ilvl: 20, implicits: [I("evasion", 40)] },
+    plated_gauntlets: { slot: "gloves", name: "Plated Gauntlets", ilvl: 20, implicits: [I("armour", 40)] },
+    duelist_gloves: { slot: "gloves", name: "Duelist Gloves", ilvl: 32, implicits: [I("attackSpeed", 6, "increased")] },
+    // Boots
+    leather_boots: { slot: "boots", name: "Leather Boots", ilvl: 1, implicits: [I("evasion", 8)] },
+    iron_greaves: { slot: "boots", name: "Iron Greaves", ilvl: 1, implicits: [I("armour", 8)] },
+    shadow_boots: { slot: "boots", name: "Shadow Boots", ilvl: 20, implicits: [I("evasion", 40)] },
+    plated_greaves: { slot: "boots", name: "Plated Greaves", ilvl: 20, implicits: [I("armour", 40)] },
+    pilgrim_boots: { slot: "boots", name: "Pilgrim Boots", ilvl: 30, implicits: [I("lifeRegen", 4)] },
+    // Amulets
+    amber_amulet: { slot: "amulet", name: "Amber Amulet", ilvl: 1, implicits: [I("life", 12)] },
+    coral_amulet: { slot: "amulet", name: "Coral Amulet", ilvl: 1, implicits: [I("manaRegen", 20, "increased")] },
+    onyx_amulet: { slot: "amulet", name: "Onyx Amulet", ilvl: 15, implicits: [I("fireRes", 6), I("coldRes", 6), I("lightningRes", 6)] },
+    gold_amulet: { slot: "amulet", name: "Gold Amulet", ilvl: 25, implicits: [I("damage", 10, "increased")] },
     // Rings
-    iron_band: { slot: "ring", name: "Iron Band", ilvl: 1, implicits: [{ stat: "life", kind: "flat", value: 10 }] },
-    ruby_band: { slot: "ring", name: "Ruby Band", ilvl: 1, implicits: [{ stat: "fireRes", kind: "flat", value: 8 }] },
-    steel_band: { slot: "ring", name: "Steel Band", ilvl: 1, implicits: [{ stat: "armour", kind: "flat", value: 25 }] }
+    iron_band: { slot: "ring", name: "Iron Band", ilvl: 1, implicits: [I("life", 10)] },
+    ruby_band: { slot: "ring", name: "Ruby Band", ilvl: 1, implicits: [I("fireRes", 8)] },
+    steel_band: { slot: "ring", name: "Steel Band", ilvl: 1, implicits: [I("armour", 25)] },
+    sapphire_band: { slot: "ring", name: "Sapphire Band", ilvl: 1, implicits: [I("coldRes", 8)] },
+    topaz_band: { slot: "ring", name: "Topaz Band", ilvl: 1, implicits: [I("lightningRes", 8)] },
+    amethyst_band: { slot: "ring", name: "Amethyst Band", ilvl: 25, implicits: [I("chaosRes", 8)] }
   };
   var T = [1, 10, 20, 30, 40, 55, 70, 80];
   function tiers(ranges, levels = T) {
     return ranges.map(([min, max], i) => ({ ilvl: levels[i], min, max }));
   }
+  var NOT_WEAPON = ["helmet", "body", "gloves", "boots", "amulet", "ring"];
+  var RES_TIERS = tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]]);
   var MODS = {
     life: {
       name: "Maximum Life",
       type: "prefix",
-      slots: ["body", "ring"],
+      slots: NOT_WEAPON,
       stat: "life",
       kind: "flat",
       text: "+{v} to maximum Life",
@@ -632,20 +698,31 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       weight: 100,
       tiers: tiers([[10, 20], [25, 45], [50, 75], [80, 120], [130, 180], [190, 240], [250, 300], [300, 400]])
     },
+    // Smaller armour/evasion rolls for helmets, gloves, boots and rings.
     ring_armour: {
       name: "Armour",
       type: "prefix",
-      slots: ["ring"],
+      slots: ["helmet", "gloves", "boots", "ring"],
       stat: "armour",
       kind: "flat",
       text: "+{v} to Armour",
-      weight: 60,
+      weight: 70,
+      tiers: tiers([[5, 10], [12, 22], [25, 38], [40, 60], [65, 90], [95, 120], [125, 150], [150, 200]])
+    },
+    piece_evasion: {
+      name: "Evasion",
+      type: "prefix",
+      slots: ["helmet", "gloves", "boots"],
+      stat: "evasion",
+      kind: "flat",
+      text: "+{v} to Evasion",
+      weight: 70,
       tiers: tiers([[5, 10], [12, 22], [25, 38], [40, 60], [65, 90], [95, 120], [125, 150], [150, 200]])
     },
     mana: {
       name: "Maximum Mana",
       type: "prefix",
-      slots: ["ring"],
+      slots: ["ring", "amulet", "helmet"],
       stat: "mana",
       kind: "flat",
       text: "+{v} to maximum Mana",
@@ -676,7 +753,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     ring_added_phys: {
       name: "Added Physical Damage",
       type: "prefix",
-      slots: ["ring"],
+      slots: ["ring", "gloves", "amulet"],
       stat: "addedPhys",
       kind: "flat",
       text: "Adds {v} to {v2} Physical Damage to Attacks",
@@ -697,17 +774,27 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     ring_ele_inc: {
       name: "Increased Elemental Damage",
       type: "prefix",
-      slots: ["ring"],
+      slots: ["ring", "amulet"],
       stat: "elemental",
       kind: "increased",
       text: "{v}% increased Elemental Damage",
       weight: 60,
       tiers: tiers([[5, 8], [9, 12], [13, 16], [17, 20], [21, 24], [25, 28], [29, 32], [33, 36]])
     },
+    amulet_damage: {
+      name: "Increased Damage",
+      type: "prefix",
+      slots: ["amulet"],
+      stat: "damage",
+      kind: "increased",
+      text: "{v}% increased Damage",
+      weight: 60,
+      tiers: tiers([[6, 10], [11, 15], [16, 20], [21, 25], [26, 30], [31, 35], [36, 40], [41, 45]])
+    },
     cast_speed: {
       name: "Cast Speed",
       type: "suffix",
-      slots: ["weapon"],
+      slots: ["weapon", "amulet"],
       stat: "castSpeed",
       kind: "increased",
       text: "{v}% increased Cast Speed",
@@ -717,48 +804,49 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     fire_res: {
       name: "Fire Resistance",
       type: "suffix",
-      slots: ["body", "ring"],
+      slots: NOT_WEAPON,
       stat: "fireRes",
       kind: "flat",
       text: "+{v}% to Fire Resistance",
       weight: 100,
-      tiers: tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]])
+      tiers: RES_TIERS
     },
     cold_res: {
       name: "Cold Resistance",
       type: "suffix",
-      slots: ["body", "ring"],
+      slots: NOT_WEAPON,
       stat: "coldRes",
       kind: "flat",
       text: "+{v}% to Cold Resistance",
       weight: 100,
-      tiers: tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]])
+      tiers: RES_TIERS
     },
     lightning_res: {
       name: "Lightning Resistance",
       type: "suffix",
-      slots: ["body", "ring"],
+      slots: NOT_WEAPON,
       stat: "lightningRes",
       kind: "flat",
       text: "+{v}% to Lightning Resistance",
       weight: 100,
-      tiers: tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]])
+      tiers: RES_TIERS
     },
     chaos_res: {
       name: "Chaos Resistance",
       type: "suffix",
-      slots: ["body", "ring"],
+      slots: NOT_WEAPON,
       stat: "chaosRes",
       kind: "flat",
       text: "+{v}% to Chaos Resistance",
-      weight: 50,
-      // Starts at tier 4 (item level 40).
-      tiers: tiers([[11, 15], [16, 20], [21, 25], [26, 30]], [40, 55, 70, 80]).map((t, i) => ({ ...t, tier: i + 4 }))
+      weight: 60,
+      // DOC: doc starts chaos res at item level 40. Blight arrives in zone 7 (level 28),
+      // so lower tiers start at 22 to give players an answer there.
+      tiers: tiers([[5, 9], [10, 14], [15, 19], [20, 24], [26, 30]], [22, 32, 45, 60, 80])
     },
     life_regen: {
       name: "Life Regeneration",
       type: "suffix",
-      slots: ["body", "ring"],
+      slots: ["body", "ring", "amulet", "helmet", "boots"],
       stat: "lifeRegen",
       kind: "flat",
       text: "Regenerate {v} Life per second",
@@ -768,7 +856,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     mana_regen: {
       name: "Mana Regeneration",
       type: "suffix",
-      slots: ["ring"],
+      slots: ["ring", "amulet"],
       stat: "manaRegen",
       kind: "increased",
       text: "{v}% increased Mana Regeneration Rate",
@@ -778,7 +866,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     attack_speed: {
       name: "Attack Speed",
       type: "suffix",
-      slots: ["weapon"],
+      slots: ["weapon", "gloves"],
       stat: "attackSpeed",
       kind: "increased",
       text: "{v}% increased Attack Speed",
@@ -788,7 +876,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     crit_chance: {
       name: "Critical Strike Chance",
       type: "suffix",
-      slots: ["weapon"],
+      slots: ["weapon", "gloves"],
       stat: "critChance",
       kind: "increased",
       text: "{v}% increased Critical Strike Chance",
@@ -798,7 +886,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     crit_multi: {
       name: "Critical Strike Multiplier",
       type: "suffix",
-      slots: ["weapon"],
+      slots: ["weapon", "amulet"],
       stat: "critMulti",
       kind: "flat",
       text: "+{v}% to Critical Strike Multiplier",
@@ -808,12 +896,43 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     targets: {
       name: "Additional Targets",
       type: "suffix",
-      slots: ["weapon"],
+      slots: ["weapon", "amulet"],
       stat: "targets",
       kind: "flat",
       text: "Skills hit +{v} additional targets",
       weight: 40,
       tiers: [{ ilvl: 40, min: 1, max: 1, tier: 4 }, { ilvl: 80, min: 2, max: 2, tier: 8 }]
+    },
+    // Helmet suffixes that feed elemental builds.
+    ignite_chance: {
+      name: "Ignite Chance",
+      type: "suffix",
+      slots: ["helmet"],
+      stat: "igniteChance",
+      kind: "flat",
+      text: "+{v}% chance to ignite with fire damage",
+      weight: 50,
+      tiers: tiers([[4, 6], [7, 9], [10, 12], [13, 15], [16, 18], [19, 21], [22, 24], [25, 28]])
+    },
+    shock_chance: {
+      name: "Shock Chance",
+      type: "suffix",
+      slots: ["helmet"],
+      stat: "shockChance",
+      kind: "flat",
+      text: "+{v}% chance to shock with lightning damage",
+      weight: 50,
+      tiers: tiers([[4, 6], [7, 9], [10, 12], [13, 15], [16, 18], [19, 21], [22, 24], [25, 28]])
+    },
+    chill_effect: {
+      name: "Chill Effect",
+      type: "suffix",
+      slots: ["helmet", "boots"],
+      stat: "chill",
+      kind: "increased",
+      text: "{v}% increased Chill effect",
+      weight: 50,
+      tiers: tiers([[8, 12], [13, 17], [18, 22], [23, 27], [28, 32], [33, 37], [38, 42], [43, 47]])
     }
   };
   for (const fam of Object.values(MODS)) {
@@ -825,7 +944,11 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     first: ["Grim", "Ash", "Storm", "Bone", "Dusk", "Iron", "Ember", "Gloom", "Rune", "Thorn", "Blood", "Cinder", "Hollow", "Wraith"],
     second: {
       weapon: ["Bite", "Edge", "Song", "Hunger", "Fang", "Cleaver", "Mangler"],
+      helmet: ["Crown", "Visage", "Brow", "Cowl", "Dome", "Halo"],
       body: ["Shell", "Ward", "Hide", "Carapace", "Bastion", "Coat"],
+      gloves: ["Grip", "Grasp", "Fist", "Hand", "Talons", "Claw"],
+      boots: ["Stride", "Tread", "March", "Track", "Step", "Path"],
+      amulet: ["Charm", "Heart", "Talisman", "Locket", "Pendant", "Eye"],
       ring: ["Loop", "Coil", "Circle", "Band", "Knot", "Spiral"]
     }
   };
@@ -1824,7 +1947,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   }
 
   // src/game.js
-  var SAVE_VERSION = 3;
+  var SAVE_VERSION = 4;
   var DT = 1 / RULES.ticksPerSecond;
   var RECENT_SECONDS = 8;
   var runtimes = /* @__PURE__ */ new WeakMap();
@@ -1874,7 +1997,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       seed,
       rngState: seed,
       time: 0,
-      character: { level: 1, xp: 0, skill: { id: "cleave", supports: [] }, passives: ["origin"], equipment: { weapon: null, body: null, ring: null } },
+      character: { level: 1, xp: 0, skill: { id: "cleave", supports: [] }, passives: ["origin"], equipment: Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null])) },
       ownedSupports: [...LINKS.startingSupports],
       player: { life: 1, mana: 1, attackTimer: 0 },
       inventory: [],
@@ -2308,16 +2431,21 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   function findItem(state2, uid) {
     const idx = state2.inventory.findIndex((i) => i.uid === uid);
     if (idx >= 0) return { item: state2.inventory[idx], where: "inventory", idx };
-    for (const slot of SLOTS) {
+    for (const slot of EQUIP_SLOTS) {
       const it = state2.character.equipment[slot];
       if (it && it.uid === uid) return { item: it, where: slot };
     }
     return null;
   }
-  function equip(state2, uid) {
+  function targetSlot(state2, item, wanted = null) {
+    const slots = slotsForType(BASES[item.baseId].slot);
+    if (wanted && slots.includes(wanted)) return wanted;
+    return slots.find((s) => !state2.character.equipment[s]) || slots[0];
+  }
+  function equip(state2, uid, wanted = null) {
     const f = findItem(state2, uid);
     if (!f || f.where !== "inventory") return { ok: false, reason: "Item not in inventory." };
-    const slot = BASES[f.item.baseId].slot;
+    const slot = targetSlot(state2, f.item, wanted);
     const old = state2.character.equipment[slot];
     state2.inventory.splice(f.idx, 1);
     if (old) state2.inventory.splice(f.idx, 0, old);
@@ -2394,8 +2522,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   function setAutoAdvance(state2, on) {
     state2.autoAdvance = on;
   }
-  function statsWithItem(state2, item) {
-    const slot = BASES[item.baseId].slot;
+  function statsWithItem(state2, item, wanted = null) {
+    const slot = targetSlot(state2, item, wanted);
     const ch = { ...state2.character, equipment: { ...state2.character.equipment, [slot]: item } };
     return computeStats(ch);
   }
@@ -2519,6 +2647,17 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     if (data.version === 2) {
       data.character.passives = ["origin"];
       data.version = 3;
+    }
+    if (data.version === 3) {
+      const eq = data.character.equipment;
+      const next = Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null]));
+      next.weapon = eq.weapon || null;
+      next.body = eq.body || null;
+      next.ring1 = eq.ring || null;
+      data.character.equipment = next;
+      data.character.passives = ["origin"];
+      data.notice = "The passive tree was rebuilt, so your passive points have been refunded.";
+      data.version = 4;
     }
     return data;
   }
@@ -2716,18 +2855,13 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     return fam.text.replace("{v}", m.value).replace("{v2}", m.value * 2);
   }
   function implicitText(imp) {
-    const map = {
-      life: `+${imp.value} to maximum Life`,
-      armour: `+${imp.value} to Armour`,
-      evasion: `+${imp.value} to Evasion`,
-      fireRes: `+${imp.value}% to Fire Resistance`
-    };
-    return map[imp.stat] || `${imp.stat} ${imp.value}`;
+    return statModText(imp);
   }
   function baseLine(item) {
     const b = BASES[item.baseId];
-    if (b.slot === "weapon") return `Physical ${b.damage[0]}\u2013${b.damage[1]} \xB7 ${b.aps.toFixed(2)} attacks/s \xB7 ${b.crit}% crit`;
-    return (b.implicits || []).map(implicitText).join(" \xB7 ");
+    const imps = (b.implicits || []).map(implicitText);
+    if (b.slot === "weapon") return [`Physical ${b.damage[0]}\u2013${b.damage[1]} \xB7 ${b.aps.toFixed(2)} attacks/s \xB7 ${b.crit}% crit`, ...imps].join(" \xB7 ");
+    return imps.join(" \xB7 ");
   }
   function itemTitle(item) {
     const b = BASES[item.baseId];
@@ -2776,6 +2910,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         return `+${v}% to Cold Resistance`;
       case "lightningRes":
         return `+${v}% to Lightning Resistance`;
+      case "chaosRes":
+        return `+${v}% to Chaos Resistance`;
       case "igniteChance":
         return `+${v}% chance to ignite with fire damage`;
       case "shockChance":
@@ -2933,7 +3069,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     }).join("");
     return `<div class="item-card r-${item.rarity}">
     <div class="item-name">${esc(itemTitle(item))}${item.locked ? ' <span class="lock" title="Locked: bulk salvage skips it">locked</span>' : ""}</div>
-    <div class="item-sub">${cap2(item.rarity)} ${esc(b.name)} \xB7 ${SLOT_NAMES[b.slot]} \xB7 item level ${item.ilvl}${equippedIn ? " \xB7 <b>equipped</b>" : ""}</div>
+    <div class="item-sub">${cap2(item.rarity)} ${esc(b.name)} \xB7 ${SLOT_NAMES[b.slot]} \xB7 item level ${item.ilvl}${equippedIn ? ` \xB7 <b>equipped as ${SLOT_NAMES[equippedIn]}</b>` : ""}</div>
     <div class="item-base">${esc(baseLine(item))}</div>
     ${lines ? `<ul class="mods">${lines}</ul>` : '<div class="muted small">No mods.</div>'}
   </div>`;
@@ -2980,31 +3116,88 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <div class="muted small">You have ${fmt2(state2.scrap)} Scrap.${item.rarity === "normal" ? " A Normal item becomes Magic." : ""}</div></div>` : `<div class="smith muted small">The Smith can't add anything here: no open mod slots. Ash resets the item to Normal.</div>`;
     return `<div class="craft"><h4>Crafting</h4><div class="cur-grid">${buttons}</div>${smith}</div>`;
   }
+  function changeSummary(state2, cur, item) {
+    const slots = slotsForType(BASES[item.baseId].slot);
+    let best = null;
+    for (const slot of slots) {
+      const alt = statsWithItem(state2, item, slot);
+      const dps = cur.damage.dps > 0 ? alt.damage.dps / cur.damage.dps - 1 : 0;
+      const life = alt.life - cur.life;
+      const resSum = (x) => ["fire", "cold", "lightning", "chaos"].reduce((a, t) => a + Math.min(x.res[t], x.maxRes[t]), 0);
+      const res = resSum(alt) - resSum(cur);
+      const def = alt.armour + alt.evasion - (cur.armour + cur.evasion);
+      const score = dps + life / Math.max(1, cur.life) + res / 150 + def / (cur.armour + cur.evasion + 300);
+      if (!best || score > best.score) best = { slot, dps, life, res, def, score };
+    }
+    const chips = [];
+    if (Math.abs(best.dps) >= 0.01) chips.push([Math.abs(best.dps) * 3, `${best.dps > 0 ? "+" : "\u2212"}${Math.round(Math.abs(best.dps) * 100)}% DPS`, best.dps > 0]);
+    if (Math.abs(best.life) >= 1) chips.push([Math.abs(best.life) / Math.max(1, cur.life) * 3, `${best.life > 0 ? "+" : "\u2212"}${fmt2(Math.abs(best.life))} life`, best.life > 0]);
+    if (Math.abs(best.res) >= 1) chips.push([Math.abs(best.res) / 50, `${best.res > 0 ? "+" : "\u2212"}${fmt2(Math.abs(best.res))}% res`, best.res > 0]);
+    if (Math.abs(best.def) >= 1) chips.push([Math.abs(best.def) / (cur.armour + cur.evasion + 300), `${best.def > 0 ? "+" : "\u2212"}${fmt2(Math.abs(best.def))} def`, best.def > 0]);
+    chips.sort((a, b) => b[0] - a[0]);
+    return { ...best, chips: chips.slice(0, 3).map(([, t, good]) => `<span class="chg ${good ? "up" : "down"}">${t}</span>`).join("") };
+  }
+  var RARITY_RANK = { normal: 0, magic: 1, rare: 2 };
   function renderGear(state2, ui2) {
     const sel = ui2.selectedUid != null ? findItem(state2, ui2.selectedUid) : null;
-    const equipped = SLOTS.map((slot) => {
+    const cur = getStats(state2);
+    const equipped = EQUIP_SLOTS.map((slot) => {
       const it = state2.character.equipment[slot];
       return `<button class="slot ${sel && sel.item === it ? "selected" : ""}" data-action="select" data-uid="${it ? it.uid : ""}" ${it ? "" : "disabled"}>
       <span class="slot-name">${SLOT_NAMES[slot]}</span>
-      ${it ? `<span class="slot-item r-${it.rarity}">${esc(itemTitle(it))}</span><span class="muted small">${esc(BASES[it.baseId].name)} \xB7 ${it.mods.length} mod${it.mods.length === 1 ? "" : "s"}</span>` : '<span class="muted">Empty</span>'}
+      ${it ? `<span class="slot-item r-${it.rarity}">${esc(itemTitle(it))}</span><span class="muted small">${esc(BASES[it.baseId].name)} \xB7 ${it.mods.length} mod${it.mods.length === 1 ? "" : "s"}</span>` : '<span class="muted small">Empty</span>'}
     </button>`;
     }).join("");
     const conv = CONVERSIONS.map((c, i) => `<button class="small-btn" data-action="convert" data-idx="${i}" ${(state2.currency[c.from] || 0) < c.amount ? "disabled" : ""}>${c.amount} ${CURRENCY[c.from].name} \u2192 1 ${CURRENCY[c.to].name}</button>`).join("");
     const wallet = `<div class="wallet">${CURRENCY_ORDER.map((c) => `<span class="coin"><b>${state2.currency[c]}</b> ${CURRENCY[c].name}</span>`).join("")}<span class="coin scrap"><b>${fmt2(state2.scrap)}</b> Scrap</span></div><div class="conv">${conv}</div>`;
     const filter = ui2.filter || "all";
-    const list = state2.inventory.filter((it) => filter === "all" || BASES[it.baseId].slot === filter).slice().reverse();
-    const filters = ["all", ...SLOTS].map((f) => `<button class="tab-chip ${filter === f ? "on" : ""}" data-action="filter" data-filter="${f}" aria-pressed="${filter === f}">${f === "all" ? "All" : SLOT_NAMES[f]}</button>`).join("");
-    const rows = list.length ? list.map((it) => `<button class="inv-row ${sel && sel.item === it ? "selected" : ""}" data-action="select" data-uid="${it.uid}">
+    const rarity = ui2.rarity || "all";
+    const sort = ui2.sort || "new";
+    const q = (ui2.search || "").trim().toLowerCase();
+    let list = state2.inventory.map((it, idx) => ({ it, idx })).filter(({ it }) => filter === "all" || BASES[it.baseId].slot === filter).filter(({ it }) => rarity === "all" || it.rarity === rarity).filter(({ it }) => !q || `${itemTitle(it)} ${BASES[it.baseId].name} ${baseLine(it)} ${it.mods.map(modText).join(" ")}`.toLowerCase().includes(q));
+    list = list.map((e) => ({ ...e, ch: changeSummary(state2, cur, e.it) }));
+    const sorters = {
+      new: (a, b) => b.idx - a.idx,
+      upgrade: (a, b) => b.ch.score - a.ch.score,
+      rarity: (a, b) => RARITY_RANK[b.it.rarity] - RARITY_RANK[a.it.rarity] || b.it.ilvl - a.it.ilvl,
+      ilvl: (a, b) => b.it.ilvl - a.it.ilvl || b.idx - a.idx,
+      type: (a, b) => ITEM_TYPES.indexOf(BASES[a.it.baseId].slot) - ITEM_TYPES.indexOf(BASES[b.it.baseId].slot) || b.idx - a.idx
+    };
+    list.sort(sorters[sort] || sorters.new);
+    const counts = {};
+    for (const it of state2.inventory) counts[BASES[it.baseId].slot] = (counts[BASES[it.baseId].slot] || 0) + 1;
+    const filters = ["all", ...ITEM_TYPES].map((f) => `<button class="tab-chip ${filter === f ? "on" : ""}" data-action="filter" data-filter="${f}" aria-pressed="${filter === f}">${f === "all" ? "All" : SLOT_NAMES[f]}${f !== "all" && counts[f] ? ` <span class="muted">${counts[f]}</span>` : ""}</button>`).join("");
+    const opt = (v, label, curV) => `<option value="${v}" ${curV === v ? "selected" : ""}>${label}</option>`;
+    const controls = `<div class="inv-controls">
+      <input id="inv-search" type="search" placeholder="Search mods, e.g. fire res" value="${esc(ui2.search || "")}" data-input="search" aria-label="Search inventory">
+      <select id="inv-rarity" data-change="rarity" aria-label="Rarity">${opt("all", "All rarities", rarity)}${opt("rare", "Rare", rarity)}${opt("magic", "Magic", rarity)}${opt("normal", "Normal", rarity)}</select>
+      <select id="inv-sort" data-change="sort" aria-label="Sort">${opt("new", "Newest", sort)}${opt("upgrade", "Best upgrade", sort)}${opt("rarity", "Rarity", sort)}${opt("ilvl", "Item level", sort)}${opt("type", "Type", sort)}</select>
+    </div>`;
+    const rows = list.length ? list.map(({ it, ch }) => `<button class="inv-row ${sel && sel.item === it ? "selected" : ""}" data-action="select" data-uid="${it.uid}">
         <span class="r-${it.rarity} inv-name">${esc(itemTitle(it))}${it.locked ? ' <span class="lock">locked</span>' : ""}</span>
-        <span class="muted small">${esc(BASES[it.baseId].name)} \xB7 ilvl ${it.ilvl}</span>
-        <span class="inv-mods small">${it.mods.map((m) => esc(modText(m))).join(" \xB7 ") || '<span class="muted">no mods</span>'}</span></button>`).join("") : '<p class="muted small empty">No items here yet. Items drop from monsters and are picked up when a pack dies.</p>';
-    let detail = '<p class="muted">Select an item to inspect, compare and craft it. You can craft on equipped items too.</p>';
+        <span class="muted small">${SLOT_NAMES[BASES[it.baseId].slot]} \xB7 ilvl ${it.ilvl}</span>
+        <span class="inv-mods small">${it.mods.map((m) => esc(modText(m))).join(" \xB7 ") || `<span class="muted">${esc(BASES[it.baseId].name)}, no mods</span>`}</span>
+        <span class="chgs">${ch.chips || '<span class="muted small">no change</span>'}</span></button>`).join("") : `<p class="muted small empty">${state2.inventory.length ? "Nothing matches these filters." : "No items yet. Items drop from monsters and are picked up when a pack dies."}</p>`;
+    let detail = '<p class="muted">Select an item to inspect, compare and craft it. You can craft on equipped items too.</p><p class="muted small">The chips on each item show what equipping it would change. For rings, they compare against whichever ring it would replace best.</p>';
     if (sel) {
       const item = sel.item;
       const isEq = sel.where !== "inventory";
-      const actions = isEq ? `<button data-action="unequip" data-slot="${sel.where}">Unequip</button>` : `<button class="primary" data-action="equip" data-uid="${item.uid}">Equip</button>
-         <button data-action="salvage" data-uid="${item.uid}">Salvage (+${salvageValue(item)} Scrap)</button>`;
-      const compare = isEq ? "" : compareRows(getStats(state2), statsWithItem(state2, item), state2.zoneId);
+      const type = BASES[item.baseId].slot;
+      let actions;
+      let compare = "";
+      if (isEq) {
+        actions = `<button data-action="unequip" data-slot="${sel.where}">Unequip</button>`;
+      } else {
+        const slots = slotsForType(type);
+        const target = slots.includes(ui2.compareSlot) ? ui2.compareSlot : changeSummary(state2, cur, item).slot;
+        actions = slots.map((sl) => {
+          const occupant = state2.character.equipment[sl];
+          const label = slots.length > 1 ? `Equip as ${SLOT_NAMES[sl]}` : "Equip";
+          return `<button class="${sl === target ? "primary" : ""}" data-action="equip" data-uid="${item.uid}" data-slot="${sl}" title="${occupant ? `Replaces ${esc(itemTitle(occupant))}` : "Slot is empty"}">${label}</button>`;
+        }).join("") + `<button data-action="salvage" data-uid="${item.uid}">Salvage (+${salvageValue(item)} Scrap)</button>`;
+        const tabs = slots.length > 1 ? `<div class="cmp-tabs">${slots.map((sl) => `<button class="tab-chip ${sl === target ? "on" : ""}" data-action="compare-slot" data-slot="${sl}">vs ${SLOT_NAMES[sl]}${state2.character.equipment[sl] ? "" : " (empty)"}</button>`).join("")}</div>` : "";
+        compare = tabs + compareRows(cur, statsWithItem(state2, item, target), state2.zoneId, slots.length > 1 ? `If equipped as ${SLOT_NAMES[target]}` : "If equipped");
+      }
       detail = `${itemCard(item, { equippedIn: isEq ? sel.where : null })}
       <div class="actions">${actions}<button data-action="lock" data-uid="${item.uid}">${item.locked ? "Unlock" : "Lock"}</button></div>
       ${compare}${craftPanel(state2, item)}`;
@@ -3013,9 +3206,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     <section class="gear-left">
       <h3>Equipped</h3><div class="slots">${equipped}</div>
       <h3>Currency</h3>${wallet}
-      <h3>Inventory <span class="muted small">${state2.inventory.length} / ${RULES.inventorySize}</span></h3>
-      <div class="inv-tools"><div class="filters">${filters}</div>
-        <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button></div></div>
+      <h3>Inventory <span class="muted small">${state2.inventory.length} / ${RULES.inventorySize}${list.length !== state2.inventory.length ? ` \xB7 showing ${list.length}` : ""}</span></h3>
+      <div class="filters">${filters}</div>
+      ${controls}
+      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Locked items are skipped.</span></div>
       <div class="inv">${rows}</div>
     </section>
     <section class="gear-right">${detail}</section>
@@ -3267,7 +3461,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     } else {
       $("save-status").textContent = "Progress isn\u2019t being saved in this browser";
     }
-    storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter }));
+    storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter, sort: ui.sort, rarity: ui.rarity }));
   }
   function notify(text, kind = "") {
     ui.message = text;
@@ -3305,7 +3499,14 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       const keepSmith = sel ? sel.value : null;
       const inv = document.querySelector(".inv");
       const scroll = inv ? inv.scrollTop : 0;
+      const active = document.activeElement && document.activeElement.id;
+      const caret = active === "inv-search" ? document.activeElement.selectionStart : null;
       put("gear", renderGear(state, ui));
+      if (active === "inv-search") {
+        const box = $("inv-search");
+        box.focus();
+        box.setSelectionRange(caret, caret);
+      }
       const sel2 = $("smith-select");
       if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
       const inv2 = document.querySelector(".inv");
@@ -3356,13 +3557,23 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         break;
       case "select":
         ui.selectedUid = uid;
+        ui.compareSlot = null;
         ui.message = "";
         break;
       case "filter":
         ui.filter = el.dataset.filter;
         break;
+      case "rarity":
+        ui.rarity = el.value;
+        break;
+      case "sort":
+        ui.sort = el.value;
+        break;
+      case "compare-slot":
+        ui.compareSlot = el.dataset.slot;
+        break;
       case "equip":
-        res = equip(state, uid);
+        res = equip(state, uid, el.dataset.slot || null);
         if (res.ok) notify("Equipped.", "good");
         break;
       case "unequip":
@@ -3452,6 +3663,13 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       e.preventDefault();
       handle(el.dataset.action, el);
     });
+    document.addEventListener("input", (e) => {
+      const el = e.target.closest("[data-input]");
+      if (!el) return;
+      ui[el.dataset.input] = el.value;
+      bump();
+      render(true);
+    });
     document.addEventListener("change", (e) => {
       const el = e.target.closest("[data-change]");
       if (el) handle(el.dataset.change, el);
@@ -3483,9 +3701,15 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       if (u.tab) ui.tab = u.tab;
       if (typeof u.speed === "number") ui.speed = u.speed;
       if (u.filter) ui.filter = u.filter;
+      if (u.sort) ui.sort = u.sort;
+      if (u.rarity) ui.rarity = u.rarity;
     } catch {
     }
     wire();
+    if (state.notice) {
+      notice = notice || state.notice;
+      delete state.notice;
+    }
     if (notice) notify(notice, "neg");
     render(true);
     last = performance.now();

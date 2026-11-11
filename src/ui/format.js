@@ -16,19 +16,14 @@ export function modText(m) {
 }
 
 export function implicitText(imp) {
-  const map = {
-    life: `+${imp.value} to maximum Life`,
-    armour: `+${imp.value} to Armour`,
-    evasion: `+${imp.value} to Evasion`,
-    fireRes: `+${imp.value}% to Fire Resistance`,
-  };
-  return map[imp.stat] || `${imp.stat} ${imp.value}`;
+  return statModText(imp);
 }
 
 export function baseLine(item) {
   const b = BASES[item.baseId];
-  if (b.slot === 'weapon') return `Physical ${b.damage[0]}–${b.damage[1]} · ${b.aps.toFixed(2)} attacks/s · ${b.crit}% crit`;
-  return (b.implicits || []).map(implicitText).join(' · ');
+  const imps = (b.implicits || []).map(implicitText);
+  if (b.slot === 'weapon') return [`Physical ${b.damage[0]}–${b.damage[1]} · ${b.aps.toFixed(2)} attacks/s · ${b.crit}% crit`, ...imps].join(' · ');
+  return imps.join(' · ');
 }
 
 export function itemTitle(item) {
@@ -62,6 +57,7 @@ export function statModText(m) {
     case 'fireRes': return `+${v}% to Fire Resistance`;
     case 'coldRes': return `+${v}% to Cold Resistance`;
     case 'lightningRes': return `+${v}% to Lightning Resistance`;
+    case 'chaosRes': return `+${v}% to Chaos Resistance`;
     case 'igniteChance': return `+${v}% chance to ignite with fire damage`;
     case 'shockChance': return `+${v}% chance to shock with lightning damage`;
     default: return `+${v} to ${STAT_NAMES[m.stat] || m.stat}`;

@@ -34,7 +34,7 @@ export const RULES = {
   travelSeconds: 1.5,
   // Pause after a run ends before the next one starts.
   runEndSeconds: 2.0,
-  inventorySize: 60,
+  inventorySize: 120,
   combatLogSize: 150,
   runHistorySize: 30,
 };

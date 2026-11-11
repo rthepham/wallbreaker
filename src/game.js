@@ -4,7 +4,7 @@
 import { PLAYER, RULES } from './data/player.js';
 import { MONSTERS, THREATS } from './data/monsters.js';
 import { ZONES } from './data/zones.js';
-import { BASES, SLOTS } from './data/items.js';
+import { BASES, EQUIP_SLOTS, slotsForType } from './data/items.js';
 import { CURRENCY_ORDER } from './data/currency.js';
 import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
 import { PASSIVES, PASSIVE_RULES } from './data/passives.js';
@@ -17,7 +17,7 @@ import { makePack, makeBossPack } from './combat.js';
 import { makeItem, rollMonsterDrops } from './loot.js';
 import { craft, salvageValue, smithCraft, convert } from './crafting.js';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const DT = 1 / RULES.ticksPerSecond;
 // Window used to describe what killed the player.
 export const RECENT_SECONDS = 8;
@@ -78,7 +78,7 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
     seed,
     rngState: seed,
     time: 0,
-    character: { level: 1, xp: 0, skill: { id: 'cleave', supports: [] }, passives: ['origin'], equipment: { weapon: null, body: null, ring: null } },
+    character: { level: 1, xp: 0, skill: { id: 'cleave', supports: [] }, passives: ['origin'], equipment: Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null])) },
     ownedSupports: [...LINKS.startingSupports],
     player: { life: 1, mana: 1, attackTimer: 0 },
     inventory: [],
@@ -542,17 +542,24 @@ function playerDied(state, killer) {
 export function findItem(state, uid) {
   const idx = state.inventory.findIndex((i) => i.uid === uid);
   if (idx >= 0) return { item: state.inventory[idx], where: 'inventory', idx };
-  for (const slot of SLOTS) {
+  for (const slot of EQUIP_SLOTS) {
     const it = state.character.equipment[slot];
     if (it && it.uid === uid) return { item: it, where: slot };
   }
   return null;
 }
 
-export function equip(state, uid) {
+// Which equipment slot an item goes into: the requested one, else an empty one, else the first.
+export function targetSlot(state, item, wanted = null) {
+  const slots = slotsForType(BASES[item.baseId].slot);
+  if (wanted && slots.includes(wanted)) return wanted;
+  return slots.find((s) => !state.character.equipment[s]) || slots[0];
+}
+
+export function equip(state, uid, wanted = null) {
   const f = findItem(state, uid);
   if (!f || f.where !== 'inventory') return { ok: false, reason: 'Item not in inventory.' };
-  const slot = BASES[f.item.baseId].slot;
+  const slot = targetSlot(state, f.item, wanted);
   const old = state.character.equipment[slot];
   state.inventory.splice(f.idx, 1);
   if (old) state.inventory.splice(f.idx, 0, old);
@@ -640,8 +647,8 @@ export function setAutoAdvance(state, on) {
 }
 
 // Stats as they would be with `item` equipped instead of the current one.
-export function statsWithItem(state, item) {
-  const slot = BASES[item.baseId].slot;
+export function statsWithItem(state, item, wanted = null) {
+  const slot = targetSlot(state, item, wanted);
   const ch = { ...state.character, equipment: { ...state.character.equipment, [slot]: item } };
   return computeStats(ch);
 }
@@ -791,6 +798,18 @@ export function migrate(data) {
     // v3: passive tree.
     data.character.passives = ['origin'];
     data.version = 3;
+  }
+  if (data.version === 3) {
+    // v4: eight equipment slots, and a rebuilt passive tree (points refunded).
+    const eq = data.character.equipment;
+    const next = Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null]));
+    next.weapon = eq.weapon || null;
+    next.body = eq.body || null;
+    next.ring1 = eq.ring || null;
+    data.character.equipment = next;
+    data.character.passives = ['origin'];
+    data.notice = 'The passive tree was rebuilt, so your passive points have been refunded.';
+    data.version = 4;
   }
   return data;
 }

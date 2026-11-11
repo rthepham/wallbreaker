@@ -34,7 +34,7 @@ function save() {
   } else {
     $('save-status').textContent = 'Progress isn’t being saved in this browser';
   }
-  storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter }));
+  storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter, sort: ui.sort, rarity: ui.rarity }));
 }
 
 function notify(text, kind = '') {
@@ -81,7 +81,14 @@ function render(force = false) {
     const keepSmith = sel ? sel.value : null;
     const inv = document.querySelector('.inv');
     const scroll = inv ? inv.scrollTop : 0;
+    const active = document.activeElement && document.activeElement.id;
+    const caret = active === 'inv-search' ? document.activeElement.selectionStart : null;
     put('gear', renderGear(state, ui));
+    if (active === 'inv-search') {
+      const box = $('inv-search');
+      box.focus();
+      box.setSelectionRange(caret, caret);
+    }
     const sel2 = $('smith-select');
     if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
     const inv2 = document.querySelector('.inv');
@@ -138,13 +145,23 @@ function handle(action, el) {
       break;
     case 'select':
       ui.selectedUid = uid;
+      ui.compareSlot = null;
       ui.message = '';
       break;
     case 'filter':
       ui.filter = el.dataset.filter;
       break;
+    case 'rarity':
+      ui.rarity = el.value;
+      break;
+    case 'sort':
+      ui.sort = el.value;
+      break;
+    case 'compare-slot':
+      ui.compareSlot = el.dataset.slot;
+      break;
     case 'equip':
-      res = equip(state, uid);
+      res = equip(state, uid, el.dataset.slot || null);
       if (res.ok) notify('Equipped.', 'good');
       break;
     case 'unequip':
@@ -236,6 +253,13 @@ function wire() {
     e.preventDefault();
     handle(el.dataset.action, el);
   });
+  document.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-input]');
+    if (!el) return;
+    ui[el.dataset.input] = el.value;
+    bump();
+    render(true);
+  });
   document.addEventListener('change', (e) => {
     const el = e.target.closest('[data-change]');
     if (el) handle(el.dataset.change, el);
@@ -266,8 +290,14 @@ function boot(data) {
     if (u.tab) ui.tab = u.tab;
     if (typeof u.speed === 'number') ui.speed = u.speed;
     if (u.filter) ui.filter = u.filter;
+    if (u.sort) ui.sort = u.sort;
+    if (u.rarity) ui.rarity = u.rarity;
   } catch { /* ignore */ }
   wire();
+  if (state.notice) {
+    notice = notice || state.notice;
+    delete state.notice;
+  }
   if (notice) notify(notice, 'neg');
   render(true);
   last = performance.now();

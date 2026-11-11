@@ -185,7 +185,16 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brass); }
 
 .gear-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
-.slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.inv-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.inv-controls input { flex: 1 1 180px; min-width: 0; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 8px; }
+.bulk { margin-bottom: 6px; align-items: center; }
+.chgs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+.chg { font-size: 0.72rem; font-family: var(--f-mono); padding: 0 5px; border-radius: 3px; border: 1px solid; }
+.chg.up { color: var(--good); border-color: #3d5a3b; }
+.chg.down { color: var(--neg); border-color: #7c3a32; }
+.cmp-tabs { display: flex; gap: 4px; margin-top: 4px; }
+.filters { margin-bottom: 4px; }
 .slot { display: grid; text-align: left; gap: 2px; padding: 8px; min-width: 0; }
 .slot-name { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .slot-item { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -197,7 +206,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .coin b { font-family: var(--f-mono); color: var(--brass); }
 .conv { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .small-btn { font-size: 0.8rem; padding: 4px 8px; }
-.inv-tools { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+
 .filters, .bulk { display: flex; flex-wrap: wrap; gap: 4px; }
 .tab-chip { font-size: 0.8rem; padding: 3px 9px; border-radius: 999px; }
 .tab-chip.on { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
@@ -304,7 +313,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   .board .diag { order: -1; }
   .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .zone { padding: 6px 8px; }
-  .slots { grid-template-columns: minmax(0, 1fr); }
+  .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wordmark { font-size: 1.4rem; }
   .log { max-height: 180px; }
 }

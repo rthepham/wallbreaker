@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { computeStats } from '../src/stats.js';
 import {
-  newGame, setSkill, setSupport, supportSlots, getStats, runTicks, startRun, serialize, deserialize, migrate,
+  newGame, setSkill, setSupport, supportSlots, getStats, runTicks, startRun, serialize, deserialize, migrate, SAVE_VERSION,
 } from '../src/game.js';
 import { supportFits } from '../src/data/skills.js';
 
@@ -138,9 +138,24 @@ test('version 1 saves migrate to the current version', () => {
   delete v1.character.skill;
   delete v1.ownedSupports;
   const m = migrate(v1);
-  assert.equal(m.version, 3);
+  assert.equal(m.version, SAVE_VERSION);
   assert.deepEqual(m.character.passives, ['origin']);
   assert.deepEqual(m.character.skill, { id: 'cleave', supports: [] });
   const loaded = deserialize(JSON.stringify(v1));
   runTicks(loaded, 100);
+});
+
+test('version 3 saves move the ring into Ring 1 and gain the new slots', () => {
+  const g = newGame(8);
+  const v3 = JSON.parse(serialize(g));
+  v3.version = 3;
+  const ring = { uid: 77, baseId: 'iron_band', ilvl: 5, rarity: 'normal', name: null, mods: [] };
+  v3.character.equipment = { weapon: v3.character.equipment.weapon, body: v3.character.equipment.body, ring };
+  v3.character.passives = ['origin', 'might_gate'];
+  const m = migrate(v3);
+  assert.equal(m.character.equipment.ring1.uid, 77);
+  assert.equal(m.character.equipment.ring2, null);
+  assert.equal(m.character.equipment.helmet, null);
+  assert.deepEqual(m.character.passives, ['origin']);
+  assert.ok(m.notice);
 });

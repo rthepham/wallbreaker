@@ -228,7 +228,7 @@ test('M3: fire resistance makes the zone 4 casters survivable', () => {
     g.character.level = 14;
     g.character.equipment.weapon.mods = [{ family: 'phys_inc', tier: 8, value: 400 }];
     g.character.equipment.body.mods = [{ family: 'armour', tier: 8, value: 400 }];
-    g.character.equipment.ring = { uid: 999, baseId: 'iron_band', ilvl: 20, rarity: 'magic', name: null, mods: fireRes ? [{ family: 'fire_res', tier: 8, value: fireRes }] : [] };
+    g.character.equipment.ring1 = { uid: 999, baseId: 'iron_band', ilvl: 20, rarity: 'magic', name: null, mods: fireRes ? [{ family: 'fire_res', tier: 8, value: fireRes }] : [] };
     invalidateStats(g);
     startRun(g, 4);
     runTicks(g, 10 * 60 * 6);
