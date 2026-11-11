@@ -27,10 +27,10 @@ function pathTo(id) {
   return out;
 }
 
-test('tree shape: 58 nodes, 6 keystones, every node reachable, links are two-way', () => {
+test('tree shape: 139 nodes, 9 keystones, every node reachable, links are two-way', () => {
   const ids = Object.keys(PASSIVES);
-  assert.equal(ids.length, 58);
-  assert.equal(ids.filter((i) => PASSIVES[i].type === 'keystone').length, 6);
+  assert.equal(ids.length, 139);
+  assert.equal(ids.filter((i) => PASSIVES[i].type === 'keystone').length, 9);
   for (const id of ids) {
     if (id !== 'origin') assert.ok(pathTo(id).length > 0, id);
     for (const n of PASSIVES[id].links) assert.ok(PASSIVES[n].links.includes(id));
@@ -39,7 +39,7 @@ test('tree shape: 58 nodes, 6 keystones, every node reachable, links are two-way
 
 test('allocating nodes changes stats', () => {
   const a = computeStats(char([]));
-  const b = computeStats(char(pathTo('might_2_n')));
+  const b = computeStats(char(pathTo('might_2_3')));
   assert.ok(b.life > a.life);
   assert.ok(b.lifeRegen > a.lifeRegen);
 });
@@ -50,42 +50,61 @@ test('points: one per level after the first; must connect; refund costs Scrap', 
   assert.match(canAllocate(g, 'might_gate'), /No passive points/);
   g.character.level = 4;
   assert.equal(passivePoints(g), 3);
-  assert.match(canAllocate(g, 'might_0_s0'), /connected/);
+  assert.match(canAllocate(g, 'might_0_0'), /connected/);
   assert.ok(allocatePassive(g, 'might_gate').ok);
-  assert.ok(allocatePassive(g, 'might_0_s0').ok);
+  assert.ok(allocatePassive(g, 'might_0_0').ok);
   // Can't refund the gate: the next node depends on it.
   assert.equal(refundPassive(g, 'might_gate').ok, false);
-  assert.equal(refundPassive(g, 'might_0_s0').ok, false); // no Scrap yet
+  assert.equal(refundPassive(g, 'might_0_0').ok, false); // no Scrap yet
   g.scrap = 10;
-  const r = refundPassive(g, 'might_0_s0');
+  const r = refundPassive(g, 'might_0_0');
   assert.ok(r.ok);
   assert.equal(g.scrap, 10 - r.cost);
   assert.deepEqual(g.character.passives, ['origin', 'might_gate']);
+  assert.match(canAllocate(g, 'bridge_might_finesse_0'), /connected/);
 });
 
-test('bonus points for first clear of zone 5', () => {
+test('bonus points for first clears of zones 5 and 10', () => {
   const g = newGame(1);
   g.character.level = 10;
   g.progress.cleared.push(5);
   assert.equal(passivePoints(g), 11);
+  g.progress.cleared.push(10);
+  assert.equal(passivePoints(g), 13);
+});
+
+test('new keystones: Colossus, Thunderstruck, Deep Winter', () => {
+  const lifeA = computeStats(char(pathTo('colossus').slice(0, -1)));
+  const lifeB = computeStats(char(pathTo('colossus')));
+  assert.equal(lifeB.life, Math.round(lifeA.life * 1.4));
+  const arc = (p) => computeStats({ ...char(p), skill: { id: 'arc', supports: [] } });
+  assert.equal(arc(pathTo('thunderstruck')).damage.ailments.shockChance, 100);
+  const nova = (p) => computeStats({ ...char(p), skill: { id: 'ice_nova', supports: [] } });
+  assert.ok(nova(pathTo('deep_winter')).damage.ailments.chillSlow >= 60);
+});
+
+test('bridges connect neighbouring regions', () => {
+  const p = pathTo('bridge_might_finesse_2');
+  assert.ok(p.includes('might_4_4') || p.includes('finesse_0_4'));
+  assert.equal(PASSIVES.bridge_might_finesse_2.type, 'notable');
 });
 
 test('Reckless Tempo: 35% more speed, 20% less life', () => {
-  const a = computeStats(char(pathTo('finesse_0_t1')));
+  const a = computeStats(char(pathTo('reckless_tempo').slice(0, -1)));
   const b = computeStats(char(pathTo('reckless_tempo')));
   assert.ok(Math.abs(b.damage.aps / a.damage.aps - 1.35) < 1e-9);
   assert.equal(b.life, Math.round(a.life * 0.8));
 });
 
 test('Spread Thin doubles targets for 35% less damage', () => {
-  const a = computeStats(char(pathTo('finesse_2_t1')));
+  const a = computeStats(char(pathTo('spread_thin').slice(0, -1)));
   const b = computeStats(char(pathTo('spread_thin')));
   assert.equal(b.damage.targets, a.damage.targets * 2);
   assert.ok(Math.abs(b.damage.dps / a.damage.dps - 0.75) < 1e-9);
 });
 
 test('Bulwark of Will: +5% max res, +20% resistances, 15% less life', () => {
-  const a = computeStats(char(pathTo('mind_2_t1')));
+  const a = computeStats(char(pathTo('bulwark').slice(0, -1)));
   const b = computeStats(char(pathTo('bulwark')));
   assert.equal(b.maxRes.fire, 80);
   assert.equal(b.res.fire, a.res.fire + 20);

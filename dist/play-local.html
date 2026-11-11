@@ -263,7 +263,8 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .count-badge:not(:empty) { display: inline-block; min-width: 1.5em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-family: var(--f-mono); font-size: 0.75rem; text-align: center; }
 .tree-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .tree-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-.tree { width: 100%; height: auto; max-height: 72vh; display: block; background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); }
+.tree-zoom { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+.tree { width: 100%; height: auto; aspect-ratio: 1 / 1; max-height: 78vh; touch-action: none; cursor: grab; display: block; background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); }
 .tree .edge { stroke: #343b4b; stroke-width: 3; }
 .tree .edge.on { stroke: var(--brass); }
 .tree .node { cursor: pointer; }
@@ -1157,6 +1158,21 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       text: ["Skills cost life instead of mana", "25% more damage"],
       mods: [L("lifeCost", 1), MORE("damage", 25)]
     },
+    colossus: {
+      name: "Colossus",
+      text: ["40% more maximum life", "25% less attack and cast speed"],
+      mods: [MORE("life", 40), MORE("speed", -25)]
+    },
+    thunderstruck: {
+      name: "Thunderstruck",
+      text: ["Your lightning hits always shock", "15% less damage"],
+      mods: [L("shockChance", 100), MORE("damage", -15)]
+    },
+    deep_winter: {
+      name: "Deep Winter",
+      text: ["Your chills slow twice as much (up to 60%)", "20% less damage"],
+      mods: [INC("chill", 100), MORE("damage", -20)]
+    },
     bulwark: {
       name: "Bulwark of Will",
       text: ["+5% to all maximum resistances", "+20% to fire, cold and lightning resistance", "15% less maximum life"],
@@ -1172,6 +1188,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       ]
     }
   };
+  var N = (name, ...mods) => ({ name, mods });
   var REGIONS = [
     {
       id: "might",
@@ -1179,22 +1196,11 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       angle: -90,
       gate: [L("life", 20)],
       branches: [
-        {
-          smalls: [[L("armour", 30)], [L("life", 15)], [L("armour", 30)]],
-          notable: { name: "Ironbound", mods: [INC("armour", 30), L("armour", 40), INC("life", 6)] },
-          tail: [[L("life", 20)], [L("armour", 40)]],
-          keystone: "iron_hide"
-        },
-        {
-          smalls: [[INC("physical", 15)], [INC("stun", 25)], [INC("physical", 15)]],
-          notable: { name: "Crushing Blows", mods: [INC("physical", 30), INC("stun", 50)] }
-        },
-        {
-          smalls: [[INC("fire", 15)], [L("igniteChance", 8)], [INC("fire", 15)]],
-          notable: { name: "Kindled Fury", mods: [INC("ignite", 50), L("igniteChance", 10)] },
-          tail: [[INC("fire", 15)], [INC("ignite", 25)]],
-          keystone: "ember_heart"
-        }
+        { small: [L("armour", 30), L("life", 15)], mid: N("Ironbound", INC("armour", 30), L("armour", 40)), end: "iron_hide" },
+        { small: [INC("physical", 15), INC("stun", 25)], mid: N("Crushing Blows", INC("physical", 30), INC("stun", 50)), end: N("Juggernaut Strength", INC("physical", 40), INC("attackSpeed", 10)) },
+        { small: [L("life", 15), L("lifeRegen", 2)], mid: N("Unbreaking", INC("life", 10), L("lifeRegen", 3)), end: "colossus" },
+        { small: [INC("fire", 15), L("igniteChance", 6)], mid: N("Kindled Fury", INC("ignite", 50), L("igniteChance", 10)), end: "ember_heart" },
+        { small: [INC("armour", 12), L("fireRes", 8)], mid: N("Steelskin", INC("armour", 25), L("life", 25)), end: N("Bastion", L("armour", 80), L("fireRes", 15), INC("life", 6)) }
       ]
     },
     {
@@ -1203,22 +1209,11 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       angle: 30,
       gate: [L("evasion", 30)],
       branches: [
-        {
-          smalls: [[INC("attackSpeed", 6)], [INC("castSpeed", 6)], [INC("damage", 10)]],
-          notable: { name: "Relentless", mods: [INC("attackSpeed", 10), INC("castSpeed", 10)] },
-          tail: [[INC("attackSpeed", 5)], [INC("castSpeed", 5)]],
-          keystone: "reckless_tempo"
-        },
-        {
-          smalls: [[INC("critChance", 25)], [L("critMulti", 12)], [INC("critChance", 25)]],
-          notable: { name: "Killer Instinct", mods: [INC("critChance", 50), L("critMulti", 25)] }
-        },
-        {
-          smalls: [[L("evasion", 30)], [INC("damage", 10)], [L("evasion", 30)]],
-          notable: { name: "Sweeping Reach", mods: [L("targets", 1), INC("evasion", 20)] },
-          tail: [[L("evasion", 40)], [INC("damage", 10)]],
-          keystone: "spread_thin"
-        }
+        { small: [INC("attackSpeed", 6), INC("castSpeed", 6)], mid: N("Relentless", INC("attackSpeed", 10), INC("castSpeed", 10)), end: "reckless_tempo" },
+        { small: [INC("critChance", 25), L("critMulti", 10)], mid: N("Killer Instinct", INC("critChance", 50), L("critMulti", 20)), end: N("Deadly Precision", INC("critChance", 60), L("critMulti", 30)) },
+        { small: [L("evasion", 30), INC("damage", 8)], mid: N("Sweeping Reach", L("targets", 1), INC("evasion", 20)), end: "spread_thin" },
+        { small: [INC("lightning", 15), L("shockChance", 6)], mid: N("Static Charge", INC("shock", 50), L("shockChance", 10)), end: "thunderstruck" },
+        { small: [INC("evasion", 12), INC("attack", 12)], mid: N("Duelist's Grace", INC("evasion", 25), INC("attack", 20)), end: N("Opportunist", INC("damage", 30), L("evasion", 60)) }
       ]
     },
     {
@@ -1227,25 +1222,22 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       angle: 150,
       gate: [L("mana", 20)],
       branches: [
-        {
-          smalls: [[INC("spell", 15)], [INC("manaRegen", 20)], [INC("spell", 15)]],
-          notable: { name: "Arcane Focus", mods: [INC("spell", 30), L("mana", 30)] },
-          tail: [[INC("spell", 15)], [INC("manaRegen", 25)]],
-          keystone: "blood_price"
-        },
-        {
-          smalls: [[INC("lightning", 15)], [L("shockChance", 8)], [INC("cold", 15)]],
-          notable: { name: "Storm and Frost", mods: [INC("shock", 50), INC("chill", 40), L("shockChance", 8)] }
-        },
-        {
-          smalls: [[L("fireRes", 10)], [L("lightningRes", 10)], [L("coldRes", 10)]],
-          notable: { name: "Elemental Ward", mods: [L("fireRes", 12), L("coldRes", 12), L("lightningRes", 12)] },
-          tail: [[L("fireRes", 10)], [L("lightningRes", 10)]],
-          keystone: "bulwark"
-        }
+        { small: [INC("spell", 15), INC("manaRegen", 15)], mid: N("Arcane Focus", INC("spell", 30), L("mana", 30)), end: "blood_price" },
+        { small: [L("mana", 15), INC("manaRegen", 20)], mid: N("Wellspring", INC("manaRegen", 40), L("mana", 20)), end: N("Deep Reserves", L("mana", 60), INC("manaRegen", 50)) },
+        { small: [L("fireRes", 10), L("lightningRes", 10)], mid: N("Elemental Ward", L("fireRes", 12), L("coldRes", 12), L("lightningRes", 12)), end: "bulwark" },
+        { small: [INC("cold", 15), INC("chill", 15)], mid: N("Hoarfrost", INC("chill", 40), INC("cold", 25)), end: "deep_winter" },
+        { small: [INC("elemental", 12), INC("castSpeed", 5)], mid: N("Elemental Mastery", INC("elemental", 30)), end: N("Piercing Will", L("penetration", 10), INC("elemental", 15)) }
       ]
     }
   ];
+  var BRIDGES = [
+    { from: "might", to: "finesse", small: [INC("attack", 10), L("life", 12)], mid: N("Warrior's Poise", INC("attack", 20), INC("life", 6)) },
+    { from: "finesse", to: "mind", small: [INC("critChance", 15), INC("spell", 10)], mid: N("Arcane Precision", INC("critChance", 30), INC("spell", 20)) },
+    { from: "mind", to: "might", small: [L("chaosRes", 6), L("life", 12)], mid: N("Resolute Spirit", L("chaosRes", 12), L("fireRes", 8), L("coldRes", 8), L("lightningRes", 8)) }
+  ];
+  var BRANCH_SPREAD = 20;
+  var R0 = 2;
+  var STEP = 0.8;
   function build() {
     const nodes = {};
     const add = (n) => {
@@ -1262,26 +1254,48 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     };
     add({ id: "origin", name: "Wanderer", type: "origin", region: null, mods: [], ...pos(0, 0) });
     for (const R of REGIONS) {
-      const gate = add({ id: `${R.id}_gate`, name: `${R.name} Gate`, type: "small", region: R.id, mods: R.gate, ...pos(R.angle, 1.2) });
+      const gate = add({ id: `${R.id}_gate`, name: `${R.name} Gate`, type: "small", region: R.id, mods: R.gate, ...pos(R.angle, 1.1) });
       link("origin", gate);
       R.branches.forEach((B, bi) => {
-        const spread = (bi - 1) * 30;
+        const angle = R.angle + (bi - 2) * BRANCH_SPREAD;
         let prev = gate;
-        let r = 2.1;
-        const step = (id, n) => {
-          add({ id, region: R.id, ...n, ...pos(R.angle + spread * Math.min(1, (r - 1.2) / 1.8), r) });
+        for (let i = 0; i < 8; i++) {
+          const r = R0 + i * STEP;
+          const at = pos(angle, r);
+          let id;
+          if (i === 3) id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: "notable", ...B.mid, ...at });
+          else if (i === 7 && typeof B.end === "string") {
+            const K = KEYSTONES[B.end];
+            id = add({ id: B.end, region: R.id, type: "keystone", name: K.name, mods: K.mods, text: K.text, ...at });
+          } else if (i === 7) id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: "notable", ...B.end, ...at });
+          else id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: "small", name: "Passive", mods: [B.small[i % 2]], ...at });
           link(prev, id);
           prev = id;
-          r += 0.9;
-        };
-        B.smalls.forEach((mods, i) => step(`${R.id}_${bi}_s${i}`, { name: `${R.name} node`, type: "small", mods }));
-        step(`${R.id}_${bi}_n`, { name: B.notable.name, type: "notable", mods: B.notable.mods });
-        if (B.keystone) {
-          B.tail.forEach((mods, i) => step(`${R.id}_${bi}_t${i}`, { name: `${R.name} node`, type: "small", mods }));
-          const K = KEYSTONES[B.keystone];
-          step(B.keystone, { name: K.name, type: "keystone", mods: K.mods, text: K.text });
         }
       });
+    }
+    for (const Bd of BRIDGES) {
+      const A = REGIONS.find((r) => r.id === Bd.from);
+      const B = REGIONS.find((r) => r.id === Bd.to);
+      const a0 = A.angle + 2 * BRANCH_SPREAD;
+      let a1 = B.angle - 2 * BRANCH_SPREAD;
+      if (a1 < a0) a1 += 360;
+      const start = `${A.id}_4_4`;
+      const end = `${B.id}_0_4`;
+      let prev = start;
+      const n = 5;
+      for (let i = 0; i < n; i++) {
+        const ang = a0 + (i + 1) / (n + 1) * (a1 - a0);
+        const id = add({
+          id: `bridge_${A.id}_${B.id}_${i}`,
+          region: null,
+          ...pos(ang, R0 + 4 * STEP + 0.6),
+          ...i === 2 ? { type: "notable", ...Bd.mid } : { type: "small", name: "Passive", mods: [Bd.small[i % 2]] }
+        });
+        link(prev, id);
+        prev = id;
+      }
+      link(prev, end);
     }
     return nodes;
   }
@@ -1290,7 +1304,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   var PASSIVE_RULES = {
     // 1 point per level after the first, plus bonus points for first clears.
     // DOC: doc gives +2 for zones 5 and 10. Zone 5 is the prototype's last zone.
-    bonusPoints: [{ zone: 5, points: 2 }],
+    bonusPoints: [{ zone: 5, points: 2 }, { zone: 10, points: 2 }],
     // Refund cost in Scrap: base + level / perLevels.
     refundBase: 1,
     refundPerLevels: 4
@@ -3365,7 +3379,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     const free = points - spent;
     const xs = Object.values(PASSIVES).map((n) => n.x);
     const ys = Object.values(PASSIVES).map((n) => n.y);
-    const pad = 1.6;
+    const pad = 2.6;
     const minX = (Math.min(...xs) - pad) * SCALE;
     const minY = (Math.min(...ys) - pad) * SCALE;
     const w = (Math.max(...xs) - Math.min(...xs) + pad * 2) * SCALE;
@@ -3396,11 +3410,12 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     }).join("");
     const regionLabels = PASSIVE_REGIONS.map((r) => {
       const a = r.angle * Math.PI / 180;
-      return `<text x="${Math.cos(a) * 6 * SCALE}" y="${Math.sin(a) * 6 * SCALE + 6}" class="rlabel">${r.name}</text>`;
+      return `<text x="${Math.cos(a) * 9.9 * SCALE}" y="${Math.sin(a) * 9.9 * SCALE + 6}" class="rlabel">${r.name}</text>`;
     }).join("");
     let detail = `<p class="muted">Click a node to see what it does and how it would change your character.</p>
     <ul class="small tree-help">
-      <li>You get 1 point per level${state2.progress.cleared.includes(5) ? "" : ", plus 2 for first clearing zone 5"}.</li>
+      <li>You get 1 point per level, plus 2 each for first clearing zones 5 and 10.</li>
+      <li>Bridges between regions let you mix, e.g. attacks with life, or crits with spells.</li>
       <li>A node can be taken once it touches one you already have.</li>
       <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
       <li>Refunding a node costs ${refundCost(state2)} Scrap at your level.</li>
@@ -3425,7 +3440,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     return `<div class="tree-grid">
     <section class="tree-wrap">
       <div class="tree-head"><b class="${free > 0 ? "good" : ""}">${free} point${free === 1 ? "" : "s"} to spend</b><span class="muted small">${spent} of ${points} used \xB7 ${Object.keys(PASSIVES).length - 1} nodes in the tree</span></div>
-      <svg class="tree" viewBox="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join("")}${regionLabels}${nodes}</svg>
+      <div class="tree-zoom"><button class="small-btn" data-action="tree-zoom" data-dir="in" aria-label="Zoom in">+</button><button class="small-btn" data-action="tree-zoom" data-dir="out" aria-label="Zoom out">\u2212</button><button class="small-btn" data-action="tree-zoom" data-dir="fit">Fit</button><span class="muted small">Drag to move \xB7 scroll to zoom</span></div>
+      <svg class="tree" id="tree-svg" viewBox="${ui2.treeView ? ui2.treeView.join(" ") : `${minX} ${minY} ${w} ${h}`}" data-full="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join("")}${regionLabels}${nodes}</svg>
     </section>
     <section class="tree-detail">${detail}</section>
   </div>`;
@@ -3620,8 +3636,18 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         res = setSupport(state, Number(el.dataset.slot), el.value || null);
         break;
       case "node":
+        if (ui.dragged) return;
         ui.selectedNode = el.dataset.node;
         break;
+      case "tree-zoom": {
+        const svg = $("tree-svg");
+        if (el.dataset.dir === "fit") ui.treeView = null;
+        else {
+          const [x, y, w, h] = currentView(svg);
+          zoomTree(svg, el.dataset.dir === "in" ? 0.75 : 1 / 0.75, x + w / 2, y + h / 2);
+        }
+        break;
+      }
       case "allocate":
         res = allocatePassive(state, el.dataset.node);
         if (res.ok) notify("Passive allocated.", "good");
@@ -3650,7 +3676,58 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     bump();
     render(true);
   }
+  function currentView(svg) {
+    return (ui.treeView || svg.getAttribute("viewBox").split(" ").map(Number)).slice();
+  }
+  function zoomTree(svg, factor, cx, cy) {
+    const full = svg.dataset.full.split(" ").map(Number);
+    const [x, y, w, h] = currentView(svg);
+    const nw = Math.max(full[2] * 0.15, Math.min(full[2], w * factor));
+    const nh = nw / w * h;
+    ui.treeView = [cx - (cx - x) * nw / w, cy - (cy - y) * nh / h, nw, nh];
+    svg.setAttribute("viewBox", ui.treeView.join(" "));
+  }
+  function wireTreePanZoom() {
+    let drag = null;
+    document.addEventListener("pointerdown", (e) => {
+      const svg = e.target.closest("#tree-svg");
+      if (!svg) return;
+      drag = { svg, x: e.clientX, y: e.clientY, view: currentView(svg), moved: false };
+      ui.dragged = false;
+    });
+    document.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+      drag.moved = true;
+      ui.dragged = true;
+      const rect = drag.svg.getBoundingClientRect();
+      const [x, y, w, h] = drag.view;
+      const scale = Math.max(w / rect.width, h / rect.height);
+      ui.treeView = [x - dx * scale, y - dy * scale, w, h];
+      drag.svg.setAttribute("viewBox", ui.treeView.join(" "));
+    });
+    document.addEventListener("pointerup", () => {
+      drag = null;
+      setTimeout(() => {
+        ui.dragged = false;
+      }, 0);
+    });
+    document.addEventListener("wheel", (e) => {
+      const svg = e.target.closest("#tree-svg");
+      if (!svg) return;
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const [x, y, w, h] = currentView(svg);
+      const scale = Math.max(w / rect.width, h / rect.height);
+      const cx = x + (e.clientX - rect.left - (rect.width - w / scale) / 2) * scale;
+      const cy = y + (e.clientY - rect.top - (rect.height - h / scale) / 2) * scale;
+      zoomTree(svg, e.deltaY < 0 ? 0.85 : 1 / 0.85, cx, cy);
+    }, { passive: false });
+  }
   function wire() {
+    wireTreePanZoom();
     document.addEventListener("click", (e) => {
       const el = e.target.closest("[data-action]");
       if (!el || el.disabled) return;

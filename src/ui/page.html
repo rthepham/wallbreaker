@@ -261,7 +261,8 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .count-badge:not(:empty) { display: inline-block; min-width: 1.5em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-family: var(--f-mono); font-size: 0.75rem; text-align: center; }
 .tree-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .tree-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-.tree { width: 100%; height: auto; max-height: 72vh; display: block; background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); }
+.tree-zoom { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+.tree { width: 100%; height: auto; aspect-ratio: 1 / 1; max-height: 78vh; touch-action: none; cursor: grab; display: block; background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); }
 .tree .edge { stroke: #343b4b; stroke-width: 3; }
 .tree .edge.on { stroke: var(--brass); }
 .tree .node { cursor: pointer; }

@@ -1,6 +1,5 @@
-// Passive tree: three regions around a free starting node.
-// Each region has a gate node and three branches. The two side branches end
-// in keystones; the middle branch ends in a notable.
+// Passive tree: three regions around a free starting node, joined by bridges.
+// Each region has a gate node and five branches; most end in a keystone.
 // Node positions are generated from angles so the data stays readable.
 
 const L = (stat, value, kind = 'flat') => ({ stat, kind, value });
@@ -33,6 +32,21 @@ export const KEYSTONES = {
     text: ['Skills cost life instead of mana', '25% more damage'],
     mods: [L('lifeCost', 1), MORE('damage', 25)],
   },
+  colossus: {
+    name: 'Colossus',
+    text: ['40% more maximum life', '25% less attack and cast speed'],
+    mods: [MORE('life', 40), MORE('speed', -25)],
+  },
+  thunderstruck: {
+    name: 'Thunderstruck',
+    text: ['Your lightning hits always shock', '15% less damage'],
+    mods: [L('shockChance', 100), MORE('damage', -15)],
+  },
+  deep_winter: {
+    name: 'Deep Winter',
+    text: ['Your chills slow twice as much (up to 60%)', '20% less damage'],
+    mods: [INC('chill', 100), MORE('damage', -20)],
+  },
   bulwark: {
     name: 'Bulwark of Will',
     text: ['+5% to all maximum resistances', '+20% to fire, cold and lightning resistance', '15% less maximum life'],
@@ -43,76 +57,55 @@ export const KEYSTONES = {
   },
 };
 
-// Each branch: 3 small nodes, a notable, then (optionally) 2 small and a keystone.
-// Small nodes are deliberately chunky so one point is something you can feel.
+// Each branch has 8 nodes: 3 small, a notable, 3 small, then a notable or keystone.
+// `small` lists two small-node bonuses that alternate along the branch.
+const N = (name, ...mods) => ({ name, mods });
 const REGIONS = [
   {
     id: 'might', name: 'Might', angle: -90,
     gate: [L('life', 20)],
     branches: [
-      {
-        smalls: [[L('armour', 30)], [L('life', 15)], [L('armour', 30)]],
-        notable: { name: 'Ironbound', mods: [INC('armour', 30), L('armour', 40), INC('life', 6)] },
-        tail: [[L('life', 20)], [L('armour', 40)]],
-        keystone: 'iron_hide',
-      },
-      {
-        smalls: [[INC('physical', 15)], [INC('stun', 25)], [INC('physical', 15)]],
-        notable: { name: 'Crushing Blows', mods: [INC('physical', 30), INC('stun', 50)] },
-      },
-      {
-        smalls: [[INC('fire', 15)], [L('igniteChance', 8)], [INC('fire', 15)]],
-        notable: { name: 'Kindled Fury', mods: [INC('ignite', 50), L('igniteChance', 10)] },
-        tail: [[INC('fire', 15)], [INC('ignite', 25)]],
-        keystone: 'ember_heart',
-      },
+      { small: [L('armour', 30), L('life', 15)], mid: N('Ironbound', INC('armour', 30), L('armour', 40)), end: 'iron_hide' },
+      { small: [INC('physical', 15), INC('stun', 25)], mid: N('Crushing Blows', INC('physical', 30), INC('stun', 50)), end: N('Juggernaut Strength', INC('physical', 40), INC('attackSpeed', 10)) },
+      { small: [L('life', 15), L('lifeRegen', 2)], mid: N('Unbreaking', INC('life', 10), L('lifeRegen', 3)), end: 'colossus' },
+      { small: [INC('fire', 15), L('igniteChance', 6)], mid: N('Kindled Fury', INC('ignite', 50), L('igniteChance', 10)), end: 'ember_heart' },
+      { small: [INC('armour', 12), L('fireRes', 8)], mid: N('Steelskin', INC('armour', 25), L('life', 25)), end: N('Bastion', L('armour', 80), L('fireRes', 15), INC('life', 6)) },
     ],
   },
   {
     id: 'finesse', name: 'Finesse', angle: 30,
     gate: [L('evasion', 30)],
     branches: [
-      {
-        smalls: [[INC('attackSpeed', 6)], [INC('castSpeed', 6)], [INC('damage', 10)]],
-        notable: { name: 'Relentless', mods: [INC('attackSpeed', 10), INC('castSpeed', 10)] },
-        tail: [[INC('attackSpeed', 5)], [INC('castSpeed', 5)]],
-        keystone: 'reckless_tempo',
-      },
-      {
-        smalls: [[INC('critChance', 25)], [L('critMulti', 12)], [INC('critChance', 25)]],
-        notable: { name: 'Killer Instinct', mods: [INC('critChance', 50), L('critMulti', 25)] },
-      },
-      {
-        smalls: [[L('evasion', 30)], [INC('damage', 10)], [L('evasion', 30)]],
-        notable: { name: 'Sweeping Reach', mods: [L('targets', 1), INC('evasion', 20)] },
-        tail: [[L('evasion', 40)], [INC('damage', 10)]],
-        keystone: 'spread_thin',
-      },
+      { small: [INC('attackSpeed', 6), INC('castSpeed', 6)], mid: N('Relentless', INC('attackSpeed', 10), INC('castSpeed', 10)), end: 'reckless_tempo' },
+      { small: [INC('critChance', 25), L('critMulti', 10)], mid: N('Killer Instinct', INC('critChance', 50), L('critMulti', 20)), end: N('Deadly Precision', INC('critChance', 60), L('critMulti', 30)) },
+      { small: [L('evasion', 30), INC('damage', 8)], mid: N('Sweeping Reach', L('targets', 1), INC('evasion', 20)), end: 'spread_thin' },
+      { small: [INC('lightning', 15), L('shockChance', 6)], mid: N('Static Charge', INC('shock', 50), L('shockChance', 10)), end: 'thunderstruck' },
+      { small: [INC('evasion', 12), INC('attack', 12)], mid: N("Duelist's Grace", INC('evasion', 25), INC('attack', 20)), end: N('Opportunist', INC('damage', 30), L('evasion', 60)) },
     ],
   },
   {
     id: 'mind', name: 'Mind', angle: 150,
     gate: [L('mana', 20)],
     branches: [
-      {
-        smalls: [[INC('spell', 15)], [INC('manaRegen', 20)], [INC('spell', 15)]],
-        notable: { name: 'Arcane Focus', mods: [INC('spell', 30), L('mana', 30)] },
-        tail: [[INC('spell', 15)], [INC('manaRegen', 25)]],
-        keystone: 'blood_price',
-      },
-      {
-        smalls: [[INC('lightning', 15)], [L('shockChance', 8)], [INC('cold', 15)]],
-        notable: { name: 'Storm and Frost', mods: [INC('shock', 50), INC('chill', 40), L('shockChance', 8)] },
-      },
-      {
-        smalls: [[L('fireRes', 10)], [L('lightningRes', 10)], [L('coldRes', 10)]],
-        notable: { name: 'Elemental Ward', mods: [L('fireRes', 12), L('coldRes', 12), L('lightningRes', 12)] },
-        tail: [[L('fireRes', 10)], [L('lightningRes', 10)]],
-        keystone: 'bulwark',
-      },
+      { small: [INC('spell', 15), INC('manaRegen', 15)], mid: N('Arcane Focus', INC('spell', 30), L('mana', 30)), end: 'blood_price' },
+      { small: [L('mana', 15), INC('manaRegen', 20)], mid: N('Wellspring', INC('manaRegen', 40), L('mana', 20)), end: N('Deep Reserves', L('mana', 60), INC('manaRegen', 50)) },
+      { small: [L('fireRes', 10), L('lightningRes', 10)], mid: N('Elemental Ward', L('fireRes', 12), L('coldRes', 12), L('lightningRes', 12)), end: 'bulwark' },
+      { small: [INC('cold', 15), INC('chill', 15)], mid: N('Hoarfrost', INC('chill', 40), INC('cold', 25)), end: 'deep_winter' },
+      { small: [INC('elemental', 12), INC('castSpeed', 5)], mid: N('Elemental Mastery', INC('elemental', 30)), end: N('Piercing Will', L('penetration', 10), INC('elemental', 15)) },
     ],
   },
 ];
+
+// Paths between neighbouring regions, for hybrid builds.
+const BRIDGES = [
+  { from: 'might', to: 'finesse', small: [INC('attack', 10), L('life', 12)], mid: N("Warrior's Poise", INC('attack', 20), INC('life', 6)) },
+  { from: 'finesse', to: 'mind', small: [INC('critChance', 15), INC('spell', 10)], mid: N('Arcane Precision', INC('critChance', 30), INC('spell', 20)) },
+  { from: 'mind', to: 'might', small: [L('chaosRes', 6), L('life', 12)], mid: N('Resolute Spirit', L('chaosRes', 12), L('fireRes', 8), L('coldRes', 8), L('lightningRes', 8)) },
+];
+
+const BRANCH_SPREAD = 20; // degrees between branches in a region
+const R0 = 2.0;
+const STEP = 0.8;
 
 function build() {
   const nodes = {};
@@ -124,26 +117,48 @@ function build() {
   };
   add({ id: 'origin', name: 'Wanderer', type: 'origin', region: null, mods: [], ...pos(0, 0) });
   for (const R of REGIONS) {
-    const gate = add({ id: `${R.id}_gate`, name: `${R.name} Gate`, type: 'small', region: R.id, mods: R.gate, ...pos(R.angle, 1.2) });
+    const gate = add({ id: `${R.id}_gate`, name: `${R.name} Gate`, type: 'small', region: R.id, mods: R.gate, ...pos(R.angle, 1.1) });
     link('origin', gate);
     R.branches.forEach((B, bi) => {
-      const spread = (bi - 1) * 30; // -30, 0, +30 degrees
+      const angle = R.angle + (bi - 2) * BRANCH_SPREAD;
       let prev = gate;
-      let r = 2.1;
-      const step = (id, n) => {
-        add({ id, region: R.id, ...n, ...pos(R.angle + spread * Math.min(1, (r - 1.2) / 1.8), r) });
+      for (let i = 0; i < 8; i++) {
+        const r = R0 + i * STEP;
+        const at = pos(angle, r);
+        let id;
+        if (i === 3) id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: 'notable', ...B.mid, ...at });
+        else if (i === 7 && typeof B.end === 'string') {
+          const K = KEYSTONES[B.end];
+          id = add({ id: B.end, region: R.id, type: 'keystone', name: K.name, mods: K.mods, text: K.text, ...at });
+        } else if (i === 7) id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: 'notable', ...B.end, ...at });
+        else id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: 'small', name: 'Passive', mods: [B.small[i % 2]], ...at });
         link(prev, id);
         prev = id;
-        r += 0.9;
-      };
-      B.smalls.forEach((mods, i) => step(`${R.id}_${bi}_s${i}`, { name: `${R.name} node`, type: 'small', mods }));
-      step(`${R.id}_${bi}_n`, { name: B.notable.name, type: 'notable', mods: B.notable.mods });
-      if (B.keystone) {
-        B.tail.forEach((mods, i) => step(`${R.id}_${bi}_t${i}`, { name: `${R.name} node`, type: 'small', mods }));
-        const K = KEYSTONES[B.keystone];
-        step(B.keystone, { name: K.name, type: 'keystone', mods: K.mods, text: K.text });
       }
     });
+  }
+  // Bridges run from the last branch of one region to the first branch of the next,
+  // starting and ending at each branch's fifth node (just past its first notable).
+  for (const Bd of BRIDGES) {
+    const A = REGIONS.find((r) => r.id === Bd.from);
+    const B = REGIONS.find((r) => r.id === Bd.to);
+    const a0 = A.angle + 2 * BRANCH_SPREAD;
+    let a1 = B.angle - 2 * BRANCH_SPREAD;
+    if (a1 < a0) a1 += 360;
+    const start = `${A.id}_4_4`;
+    const end = `${B.id}_0_4`;
+    let prev = start;
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const ang = a0 + ((i + 1) / (n + 1)) * (a1 - a0);
+      const id = add({
+        id: `bridge_${A.id}_${B.id}_${i}`, region: null, ...pos(ang, R0 + 4 * STEP + 0.6),
+        ...(i === 2 ? { type: 'notable', ...Bd.mid } : { type: 'small', name: 'Passive', mods: [Bd.small[i % 2]] }),
+      });
+      link(prev, id);
+      prev = id;
+    }
+    link(prev, end);
   }
   return nodes;
 }
@@ -154,7 +169,7 @@ export const PASSIVE_REGIONS = REGIONS.map((r) => ({ id: r.id, name: r.name, ang
 export const PASSIVE_RULES = {
   // 1 point per level after the first, plus bonus points for first clears.
   // DOC: doc gives +2 for zones 5 and 10. Zone 5 is the prototype's last zone.
-  bonusPoints: [{ zone: 5, points: 2 }],
+  bonusPoints: [{ zone: 5, points: 2 }, { zone: 10, points: 2 }],
   // Refund cost in Scrap: base + level / perLevels.
   refundBase: 1,
   refundPerLevels: 4,

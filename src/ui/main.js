@@ -208,8 +208,18 @@ function handle(action, el) {
       res = setSupport(state, Number(el.dataset.slot), el.value || null);
       break;
     case 'node':
+      if (ui.dragged) return;
       ui.selectedNode = el.dataset.node;
       break;
+    case 'tree-zoom': {
+      const svg = $('tree-svg');
+      if (el.dataset.dir === 'fit') ui.treeView = null;
+      else {
+        const [x, y, w, h] = currentView(svg);
+        zoomTree(svg, el.dataset.dir === 'in' ? 0.75 : 1 / 0.75, x + w / 2, y + h / 2);
+      }
+      break;
+    }
     case 'allocate':
       res = allocatePassive(state, el.dataset.node);
       if (res.ok) notify('Passive allocated.', 'good');
@@ -239,7 +249,63 @@ function handle(action, el) {
   render(true);
 }
 
+// ---------- Passive tree pan & zoom ----------
+
+function currentView(svg) {
+  return (ui.treeView || svg.getAttribute('viewBox').split(' ').map(Number)).slice();
+}
+
+function zoomTree(svg, factor, cx, cy) {
+  const full = svg.dataset.full.split(' ').map(Number);
+  const [x, y, w, h] = currentView(svg);
+  const nw = Math.max(full[2] * 0.15, Math.min(full[2], w * factor));
+  const nh = (nw / w) * h;
+  ui.treeView = [cx - ((cx - x) * nw) / w, cy - ((cy - y) * nh) / h, nw, nh];
+  svg.setAttribute('viewBox', ui.treeView.join(' '));
+}
+
+function wireTreePanZoom() {
+  let drag = null;
+  document.addEventListener('pointerdown', (e) => {
+    const svg = e.target.closest('#tree-svg');
+    if (!svg) return;
+    drag = { svg, x: e.clientX, y: e.clientY, view: currentView(svg), moved: false };
+    ui.dragged = false;
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    ui.dragged = true;
+    const rect = drag.svg.getBoundingClientRect();
+    const [x, y, w, h] = drag.view;
+    const scale = Math.max(w / rect.width, h / rect.height);
+    ui.treeView = [x - dx * scale, y - dy * scale, w, h];
+    drag.svg.setAttribute('viewBox', ui.treeView.join(' '));
+  });
+  document.addEventListener('pointerup', () => {
+    drag = null;
+    // Let the click that ends a drag be ignored, then reset.
+    setTimeout(() => { ui.dragged = false; }, 0);
+  });
+  document.addEventListener('wheel', (e) => {
+    const svg = e.target.closest('#tree-svg');
+    if (!svg) return;
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const [x, y, w, h] = currentView(svg);
+    const scale = Math.max(w / rect.width, h / rect.height);
+    // Point under the cursor, in tree units (the svg keeps its aspect ratio, centred).
+    const cx = x + (e.clientX - rect.left - (rect.width - w / scale) / 2) * scale;
+    const cy = y + (e.clientY - rect.top - (rect.height - h / scale) / 2) * scale;
+    zoomTree(svg, e.deltaY < 0 ? 0.85 : 1 / 0.85, cx, cy);
+  }, { passive: false });
+}
+
 function wire() {
+  wireTreePanZoom();
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el || el.disabled) return;

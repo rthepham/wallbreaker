@@ -530,7 +530,7 @@ export function renderTree(state, ui) {
   const free = points - spent;
   const xs = Object.values(PASSIVES).map((n) => n.x);
   const ys = Object.values(PASSIVES).map((n) => n.y);
-  const pad = 1.6;
+  const pad = 2.6;
   const minX = (Math.min(...xs) - pad) * SCALE;
   const minY = (Math.min(...ys) - pad) * SCALE;
   const w = (Math.max(...xs) - Math.min(...xs) + pad * 2) * SCALE;
@@ -565,12 +565,13 @@ export function renderTree(state, ui) {
   }).join('');
   const regionLabels = PASSIVE_REGIONS.map((r) => {
     const a = (r.angle * Math.PI) / 180;
-    return `<text x="${Math.cos(a) * 6.0 * SCALE}" y="${Math.sin(a) * 6.0 * SCALE + 6}" class="rlabel">${r.name}</text>`;
+    return `<text x="${Math.cos(a) * 9.9 * SCALE}" y="${Math.sin(a) * 9.9 * SCALE + 6}" class="rlabel">${r.name}</text>`;
   }).join('');
 
   let detail = `<p class="muted">Click a node to see what it does and how it would change your character.</p>
     <ul class="small tree-help">
-      <li>You get 1 point per level${state.progress.cleared.includes(5) ? '' : ', plus 2 for first clearing zone 5'}.</li>
+      <li>You get 1 point per level, plus 2 each for first clearing zones 5 and 10.</li>
+      <li>Bridges between regions let you mix, e.g. attacks with life, or crits with spells.</li>
       <li>A node can be taken once it touches one you already have.</li>
       <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
       <li>Refunding a node costs ${refundCost(state)} Scrap at your level.</li>
@@ -598,7 +599,8 @@ export function renderTree(state, ui) {
   return `<div class="tree-grid">
     <section class="tree-wrap">
       <div class="tree-head"><b class="${free > 0 ? 'good' : ''}">${free} point${free === 1 ? '' : 's'} to spend</b><span class="muted small">${spent} of ${points} used · ${Object.keys(PASSIVES).length - 1} nodes in the tree</span></div>
-      <svg class="tree" viewBox="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join('')}${regionLabels}${nodes}</svg>
+      <div class="tree-zoom"><button class="small-btn" data-action="tree-zoom" data-dir="in" aria-label="Zoom in">+</button><button class="small-btn" data-action="tree-zoom" data-dir="out" aria-label="Zoom out">−</button><button class="small-btn" data-action="tree-zoom" data-dir="fit">Fit</button><span class="muted small">Drag to move · scroll to zoom</span></div>
+      <svg class="tree" id="tree-svg" viewBox="${ui.treeView ? ui.treeView.join(' ') : `${minX} ${minY} ${w} ${h}`}" data-full="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join('')}${regionLabels}${nodes}</svg>
     </section>
     <section class="tree-detail">${detail}</section>
   </div>`;
