@@ -51,7 +51,8 @@ function mainKiller(d) {
   return { threat: d.threat, type: d.type, taken: d.taken, hits: 1, biggestRaw: d.raw };
 }
 
-function lookAtFor(type) {
+function lookAtFor(type, threat) {
+  if (threat === 'blight') return 'Chaos resistance, life regeneration, killing Blight packs faster';
   if (type === 'physical') return 'Armour, Evasion, maximum Life';
   if (type === 'chaos') return 'Chaos resistance, Life regeneration';
   return `${cap(type)} resistance, maximum Life`;
@@ -75,7 +76,9 @@ export function diagnose(state, stats) {
     const n = counts[key(best)];
     const detailStat = k.type === 'physical' ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, state.zoneId);
     let message;
-    if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
+    if (k.threat === 'blight') {
+      message = `Rotted away by Blight: its stacks dealt ${fmt(k.taken)} chaos damage over your last ${RECENT_SECONDS} seconds. Your chaos resistance is ${fmt(stats.res.chaos)}% and you regenerate ${fmt(stats.lifeRegen)} life per second.`;
+    } else if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
       const what = best.isBig && k.threat === 'boss' ? "the boss's heavy blow" : threatLabel(k.threat);
       message = `Killed by a ${fmt(k.biggestRaw)} ${k.type} hit from ${what}. ${detailStat}`;
     } else {
@@ -89,7 +92,7 @@ export function diagnose(state, stats) {
       damageType: k.type,
       message,
       detail: `${deaths.length} deaths in your last ${runs.length} runs here (${n} mainly from ${k.type} damage by ${k.threat === 'boss' ? 'the boss' : `${THREATS[k.threat].name}s`}).`,
-      lookAt: lookAtFor(k.type),
+      lookAt: lookAtFor(k.type, k.threat),
     });
   }
 

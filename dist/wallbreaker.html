@@ -34,6 +34,7 @@
   --f-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --radius: 4px;
 }
+[hidden] { display: none !important; }
 html, body { background: var(--ground); color: var(--ink); }
 body {
   font-family: var(--f-body);
@@ -83,6 +84,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 
 /* Zones */
 .zones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.zone.locked { opacity: 0.6; }
 .zone { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; background: var(--panel); }
 .zone.current { border-color: var(--brass); background: var(--panel-2); box-shadow: inset 3px 0 0 var(--brass); }
 .zone-num { font-variant-numeric: lining-nums; font-family: var(--f-display); font-size: 1.4rem; color: var(--brass); width: 1.2em; text-align: center; }
@@ -142,6 +144,8 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .st { font-size: 0.68rem; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
 .st-fire { color: var(--t-fire); } .st-lightning { color: var(--t-lightning); } .st-cold { color: var(--t-cold); } .st-physical { color: var(--t-physical); }
 .dt-physical { color: var(--t-physical); }
+.blight { color: var(--t-chaos); font-weight: 500; }
+.warn-line { color: var(--t-fire); }
 .mon.r-magic .mon-name { color: var(--r-magic); }
 .mon.r-rare .mon-name { color: var(--r-rare); }
 .mon.r-boss .mon-name { color: var(--r-boss); font-weight: 600; }
@@ -301,6 +305,17 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
 .help li { margin-bottom: 4px; }
 .reset-box { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--rule); display: grid; gap: 8px; justify-items: start; }
 .reset-confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px; resize: vertical; }
+.overlay { position: fixed; inset: 0; background: rgba(8, 10, 14, 0.72); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.overlay-card { background: var(--panel); border: 1px solid var(--brass); border-radius: var(--radius); padding: 18px 20px; max-width: 460px; width: 100%; display: grid; gap: 10px; }
+.offline-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.auto-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; }
+.check { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; cursor: pointer; }
+.check input { accent-color: var(--brass); }
+.fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.fam-group { border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 10px; margin: 0; font-size: 0.85rem; }
+.fam-group legend { color: var(--brass); font-family: var(--f-display); padding: 0 4px; }
+.type-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; }
 .danger { background: #8c2f25; border-color: #c2493b; color: #fff4ee; }
 
 @media (max-width: 1100px) {
@@ -309,7 +324,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   .zones { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 }
 @media (max-width: 760px) {
-  .board, .gear-grid, .sheet-grid, .skills-grid, .tree-grid { grid-template-columns: minmax(0, 1fr); }
+  .board, .gear-grid, .sheet-grid, .skills-grid, .tree-grid, .auto-grid { grid-template-columns: minmax(0, 1fr); }
   .board .fight { order: -2; }
   .board .diag { order: -1; }
   .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -322,7 +337,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
 
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–5 · skills · passive tree</span></div>
+    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–10</span></div>
     <div class="controls">
       <div class="speed" role="group" aria-label="Game speed">
         <button data-action="speed" data-speed="0" aria-pressed="false">Pause</button>
@@ -348,6 +363,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       <button role="tab" data-action="tab" data-tab="gear" aria-selected="true">Gear &amp; crafting</button>
       <button role="tab" data-action="tab" data-tab="skills" aria-selected="false">Skills</button>
       <button role="tab" data-action="tab" data-tab="tree" aria-selected="false">Passive tree <span id="tree-count" class="count-badge"></span></button>
+      <button role="tab" data-action="tab" data-tab="auto" aria-selected="false">Automation</button>
       <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
       <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
     </div>
@@ -355,6 +371,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     <div data-panel="gear" id="gear" role="tabpanel"></div>
     <div data-panel="skills" id="skills" role="tabpanel" hidden></div>
     <div data-panel="tree" id="tree" role="tabpanel" hidden></div>
+    <div data-panel="auto" id="auto" role="tabpanel" hidden></div>
     <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
     <div data-panel="help" role="tabpanel" hidden>
       <div class="help">
@@ -370,6 +387,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
           <li><b>Damage types matter.</b> Fire sets enemies burning (great on bosses). Lightning shocks them so they take more damage. Cold chills them so they attack slower. Heavy physical hits stun. Some enemies resist a type: Brutes shrug off physical, casters resist their own element. The zone header shows who resists what.</li>
+          <li><b>Zones 6–10:</b> your elemental resistances are 20% lower, so re-cap them. <b>Blight</b> monsters stack chaos damage over time on you (up to 5 stacks): chaos resistance and life regeneration are the answer. From zone 8, monsters resist all elements a little.</li>
           <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
           <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>
         </ul>
@@ -383,6 +401,18 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <h3>Prototype check</h3>
         <p>Play for about 20 minutes. Zone 4 (Emberwatch) is full of fire casters. The question: is hitting that wall, understanding it, crafting through it and pushing on satisfying?</p>
         <p class="muted small">Your game saves in this browser every 30 seconds and when you leave the page.</p>
+        <h3>Back up your save</h3>
+        <p class="small muted">Your game saves in this browser. To keep a copy or move it to another browser, copy the save text and paste it back in later.</p>
+        <textarea id="save-text" rows="3" placeholder="Save text appears here, or paste one to load it" aria-label="Save text"></textarea>
+        <div class="actions">
+          <button data-action="export">Copy my save</button>
+          <button data-action="import-ask">Load save from text</button>
+        </div>
+        <div id="import-confirm" class="reset-confirm" hidden>
+          <span>This replaces your current game with the pasted one.</span>
+          <button class="danger" data-action="import-confirm">Replace my game</button>
+          <button data-action="import-cancel">Cancel</button>
+        </div>
         <div class="reset-box">
           <button data-action="reset-ask">Start a new character</button>
           <div id="reset-confirm" class="reset-confirm" hidden>
@@ -394,6 +424,13 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       </div>
     </div>
   </section>
+</div>
+<div id="offline" class="overlay" role="dialog" aria-modal="true" aria-labelledby="offline-title" hidden>
+  <div class="overlay-card">
+    <h2 id="offline-title">While you were away</h2>
+    <div id="offline-body"></div>
+    <button class="primary" data-action="offline-close">Continue</button>
+  </div>
 </div>
 <script>(() => {
   // src/data/player.js
@@ -431,7 +468,17 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     runEndSeconds: 2,
     inventorySize: 120,
     combatLogSize: 150,
-    runHistorySize: 30
+    runHistorySize: 30,
+    // Offline progress (doc section 10).
+    offline: {
+      minSeconds: 60,
+      // shorter absences are ignored
+      capHours: 8,
+      efficiency: 0.5,
+      // share of the active rate
+      sampleRuns: 10
+      // recent runs in the current zone used as the average
+    }
   };
 
   // src/data/monsters.js
@@ -439,10 +486,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     lifeBase: 15,
     lifeGrowth: 1.14,
     hitBase: 5,
-    hitGrowth: 1.1,
+    hitGrowth: 1.08,
     // Global knob for monster damage. 1.0 = doc values. Lowered because every
     // monster in a pack attacks at once, which the doc's per-hit numbers didn't account for.
-    damageScale: 0.4,
+    damageScale: 0.46,
     // Hits roll between (1 - variance) and (1 + variance) of their base.
     hitVariance: 0.2,
     xpBase: 2,
@@ -502,6 +549,20 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         cold: ["Rime Acolyte", "Frost Mage"],
         lightning: ["Storm Acolyte", "Spark Mage"]
       }
+    },
+    // Blight: hits add a stack of chaos damage over time instead of dealing a hit.
+    // Can't be evaded or blocked by armour. Chaos resistance and regen answer it.
+    blight: {
+      name: "Blight",
+      damageType: "chaos",
+      interval: 1.5,
+      hitMult: 0.4,
+      // damage per second per stack, as a share of a normal hit
+      lifeMult: 1,
+      xpMult: 1.2,
+      dropMult: 1,
+      stacks: { duration: 4, max: 5 },
+      names: ["Rotspawn", "Blightmaw", "Sporeling", "Mire Leech"]
     },
     boss: {
       name: "Boss",
@@ -572,6 +633,81 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         { threat: "caster", element: "lightning", weight: 1.5 }
       ],
       boss: { name: "Ashborn Colossus", damageType: "physical", res: { physical: 30, fire: 30 } },
+      targetPackSeconds: 6
+    },
+    // Zones 6-10: your resistances are 20% lower here (see zoneResPenalty).
+    {
+      id: 6,
+      name: "Frostmere Shallows",
+      level: 23,
+      packs: 10,
+      mix: [
+        { threat: "swarm", weight: 1 },
+        { threat: "brute", weight: 1 },
+        { threat: "caster", element: "cold", weight: 2 },
+        { threat: "caster", element: "lightning", weight: 1 }
+      ],
+      boss: { name: "Rimeheart Herald", damageType: "cold", res: { cold: 40 } },
+      targetPackSeconds: 6
+    },
+    {
+      id: 7,
+      name: "The Rotting Halls",
+      level: 28,
+      packs: 10,
+      mix: [
+        { threat: "swarm", weight: 1 },
+        { threat: "blight", weight: 3 },
+        { threat: "brute", weight: 1 }
+      ],
+      boss: { name: "The Mire Mother", damageType: "chaos", res: { physical: 20 } },
+      targetPackSeconds: 6
+    },
+    {
+      id: 8,
+      name: "Stormspire",
+      level: 33,
+      packs: 10,
+      // From zone 8 on, monsters resist all elements a little.
+      monsterEleRes: 10,
+      mix: [
+        { threat: "caster", element: "lightning", weight: 2 },
+        { threat: "caster", element: "cold", weight: 1 },
+        { threat: "blight", weight: 1 },
+        { threat: "brute", weight: 1 }
+      ],
+      boss: { name: "Stormcaller Vex", damageType: "lightning", res: { lightning: 40 } },
+      targetPackSeconds: 6
+    },
+    {
+      id: 9,
+      name: "The Gravefields",
+      level: 38,
+      packs: 10,
+      monsterEleRes: 10,
+      mix: [
+        { threat: "brute", weight: 3 },
+        { threat: "swarm", weight: 2 },
+        { threat: "blight", weight: 1 }
+      ],
+      boss: { name: "The Gravewarden", damageType: "physical", res: { physical: 40 } },
+      targetPackSeconds: 6
+    },
+    {
+      id: 10,
+      name: "The Last Wall",
+      level: 42,
+      packs: 10,
+      monsterEleRes: 10,
+      mix: [
+        { threat: "swarm", weight: 1 },
+        { threat: "brute", weight: 1.5 },
+        { threat: "caster", element: "fire", weight: 1 },
+        { threat: "caster", element: "cold", weight: 1 },
+        { threat: "caster", element: "lightning", weight: 1 },
+        { threat: "blight", weight: 1 }
+      ],
+      boss: { name: "The Last Wall", damageType: "physical", res: { physical: 20, fire: 20, cold: 20, lightning: 20 } },
       targetPackSeconds: 6
     }
   ];
@@ -1115,7 +1251,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     base: 2,
     // DOC: doc unlocks the 3rd link at zone 6 and the 4th at map tier 1.
     // The prototype only has 5 zones, so they come earlier.
-    unlocks: [{ zone: 3, slots: 3 }, { zone: 5, slots: 4 }],
+    unlocks: [{ zone: 3, slots: 3 }, { zone: 5, slots: 4 }, { zone: 8, slots: 5 }],
     startingSupports: ["brutality"],
     // Chance a repeat boss kill drops a support you don't own.
     // A zone's first clear always gives one.
@@ -1346,6 +1482,20 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       duration: 0.8,
       bossMult: 3
     }
+  };
+
+  // src/data/automation.js
+  var AUTOMATION = {
+    autoSalvage: { name: "Auto-salvage", zone: 3, text: "Salvages Normal items as they drop." },
+    lootFilter: { name: "Loot filter", zone: 8, text: "Salvages Magic and Rare items that have none of the mods you choose to keep." }
+  };
+  var DEFAULT_AUTOMATION = {
+    salvageNormal: true,
+    salvageMagic: false,
+    salvageRare: false,
+    keepFamilies: ["fire_res", "cold_res", "lightning_res", "chaos_res", "life"],
+    // Always keep items of these types regardless of mods (empty = none).
+    keepTypes: []
   };
 
   // src/rng.js
@@ -1725,6 +1875,9 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     m.res = { ...T2.res || {} };
     if (threatId === "caster" && T2.ownElementRes) m.res[damageType] = T2.ownElementRes;
     if (isBoss && zone.boss.res) m.res = { ...zone.boss.res };
+    for (const t of ["fire", "cold", "lightning"]) {
+      if (zone.monsterEleRes) m.res[t] = (m.res[t] || 0) + zone.monsterEleRes;
+    }
     m.status = {};
     return m;
   }
@@ -2023,7 +2176,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       log: [],
       nextUid: 1,
       nextMonsterId: 1,
-      lifetime: { kills: 0, deaths: 0, runs: 0 }
+      lifetime: { kills: 0, deaths: 0, runs: 0 },
+      automation: { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] }
     };
     const r = rng(state2);
     state2.character.equipment.weapon = makeItem(r, state2.nextUid++, { baseId: "rusted_blade", ilvl: 1 });
@@ -2061,6 +2215,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     state2.player.life = s.life;
     state2.player.mana = s.mana;
     state2.player.attackTimer = 0;
+    state2.player.blight = [];
     state2.run = {
       zoneId,
       phase: "travel",
@@ -2160,7 +2315,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       const pace = m.status.chill ? 1 - m.status.chill.slow / 100 : 1;
       m.attackTimer -= DT * pace;
       if (m.attackTimer <= 0) {
-        monsterHit(state2, s, m, 1);
+        if (m.threat === "blight") applyBlight(state2, m);
+        else monsterHit(state2, s, m, 1);
         m.attackTimer += m.interval;
         if (p.life <= 0) return playerDied(state2, m);
       }
@@ -2183,7 +2339,37 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       packCleared(state2);
       return;
     }
+    if (tickBlight(state2, s)) return;
     regen(state2, DT);
+  }
+  function applyBlight(state2, m) {
+    const p = state2.player;
+    const B = THREATS.blight.stacks;
+    p.blight || (p.blight = []);
+    if (p.blight.length >= B.max) p.blight.shift();
+    p.blight.push({ dps: m.hit, time: B.duration });
+    state2.run.blightSource = m;
+  }
+  function tickBlight(state2, s) {
+    var _a;
+    const p = state2.player;
+    if (!p.blight || !p.blight.length) return false;
+    const raw = p.blight.reduce((a, b) => a + b.dps, 0) * DT;
+    const taken = damageTaken(s, "chaos", raw, state2.run.zoneId);
+    p.life -= taken;
+    const rec = state2.run.record;
+    rec.damageByType.chaos = (rec.damageByType.chaos || 0) + taken;
+    const recent = (_a = state2.run).recentHits || (_a.recentHits = []);
+    recent.push({ t: state2.time, threat: "blight", type: "chaos", taken, raw, isBig: false, dot: true });
+    while (recent.length && recent[0].t < state2.time - RECENT_SECONDS) recent.shift();
+    for (const b of p.blight) b.time -= DT;
+    p.blight = p.blight.filter((b) => b.time > 0);
+    if (p.life <= 0) {
+      state2.run.lastHit = { raw, taken, type: "chaos", isBig: false };
+      playerDied(state2, state2.run.blightSource || { name: "Blight", damageType: "chaos", threat: "blight" });
+      return true;
+    }
+    return false;
   }
   function tickAilments(state2, m) {
     const st = m.status;
@@ -2339,6 +2525,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     const zone = getZone(run.zoneId);
     const seconds = state2.time - run.packStart;
     pickUpLoot(state2);
+    state2.player.blight = [];
     if (run.pack.threat === "boss") {
       rec.bossSeconds = seconds;
       runComplete(state2);
@@ -2351,10 +2538,31 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     run.timer = RULES.travelSeconds;
     if (run.packIndex === zone.packs) log(state2, "info", "The area falls quiet. The boss awaits.");
   }
+  function automationUnlocked(state2, key) {
+    return state2.progress.cleared.includes(AUTOMATION[key].zone);
+  }
+  function lootAction(state2, item) {
+    const a = state2.automation || DEFAULT_AUTOMATION;
+    if ((a.keepTypes || []).includes(BASES[item.baseId].slot)) return "keep";
+    if (item.rarity === "normal") return automationUnlocked(state2, "autoSalvage") && a.salvageNormal ? "salvage" : "keep";
+    if (!automationUnlocked(state2, "lootFilter")) return "keep";
+    const wanted = item.mods.some((m) => a.keepFamilies.includes(m.family));
+    if (item.rarity === "magic" && a.salvageMagic && !wanted) return "salvage";
+    if (item.rarity === "rare" && a.salvageRare && !wanted) return "salvage";
+    return "keep";
+  }
   function pickUpLoot(state2) {
     const pl = state2.run.pendingLoot;
     const rec = state2.run.record;
+    let autoCount = 0;
+    let autoScrap = 0;
     for (const item of pl.items) {
+      if (lootAction(state2, item) === "salvage") {
+        autoCount++;
+        autoScrap += salvageValue(item);
+        rec.items++;
+        continue;
+      }
       if (state2.inventory.length >= RULES.inventorySize) {
         log(state2, "warn", `Inventory full: left ${itemLabel(item)} behind.`);
         continue;
@@ -2362,6 +2570,10 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       state2.inventory.push(item);
       rec.items++;
       if (item.rarity !== "normal") log(state2, `loot ${item.rarity}`, `Picked up ${item.rarity} ${BASES[item.baseId].name}${item.name ? ` "${item.name}"` : ""}.`);
+    }
+    if (autoCount) {
+      state2.scrap += autoScrap;
+      rec.autoSalvaged = (rec.autoSalvaged || 0) + autoCount;
     }
     for (const [c, n] of Object.entries(pl.currency)) {
       state2.currency[c] += n;
@@ -2638,6 +2850,85 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   function statsWithPassives(state2, passives) {
     return computeStats({ ...state2.character, passives });
   }
+  function setAutomation(state2, patch) {
+    state2.automation = { ...state2.automation, ...patch };
+    return { ok: true };
+  }
+  function offlineRates(state2) {
+    const O = RULES.offline;
+    const runs = state2.runHistory.filter((r) => r.zoneId === state2.zoneId).slice(-O.sampleRuns);
+    if (!runs.length) return null;
+    const n = runs.length;
+    const sum = (f) => runs.reduce((a, r) => a + f(r), 0);
+    return {
+      zoneId: state2.zoneId,
+      seconds: Math.max(10, sum((r) => r.end - r.start) / n),
+      xp: sum((r) => r.xp) / n,
+      items: sum((r) => r.items) / n,
+      currency: sum((r) => r.currency) / n,
+      deathRate: sum((r) => r.outcome === "died" ? 1 : 0) / n
+    };
+  }
+  function applyOffline(state2, secondsAway, capHours = RULES.offline.capHours) {
+    const O = RULES.offline;
+    if (secondsAway < O.minSeconds) return null;
+    const seconds = Math.min(secondsAway, capHours * 3600);
+    const rates = offlineRates(state2);
+    if (!rates) return { seconds, runs: 0, reason: "No finished runs in this zone yet, so nothing was gained." };
+    const runs = Math.floor(seconds / rates.seconds * O.efficiency);
+    if (runs < 1) return { seconds, runs: 0, reason: "Not long enough for a full run." };
+    const r = rng(state2);
+    const zone = getZone(rates.zoneId);
+    const levelBefore = state2.character.level;
+    const factor = (L2) => Math.max(0, 1 - Math.max(0, L2 - zone.level - PLAYER.xpGraceLevels) * PLAYER.xpPenaltyPerLevel);
+    const base = factor(levelBefore) > 0 ? rates.xp / factor(levelBefore) : 0;
+    let xp = 0;
+    for (let i = 0; i < runs; i++) {
+      const gain = base * factor(state2.character.level);
+      xp += gain;
+      gainXp(state2, gain);
+    }
+    const itemCount = Math.round(rates.items * runs);
+    let kept = 0;
+    let salvaged = 0;
+    let scrap = 0;
+    const byRarity = { normal: 0, magic: 0, rare: 0 };
+    for (let i = 0; i < itemCount; i++) {
+      const item = makeItem(r, state2.nextUid++, { baseId: pickBase(r, zone.level), ilvl: zone.level, rarity: rollRarity(r) });
+      byRarity[item.rarity]++;
+      if (state2.inventory.length < RULES.inventorySize) {
+        state2.inventory.push(item);
+        kept++;
+      } else {
+        salvaged++;
+        scrap += salvageValue(item);
+      }
+    }
+    state2.scrap += scrap;
+    const currency = {};
+    const curCount = Math.round(rates.currency * runs);
+    for (let i = 0; i < curCount; i++) {
+      const c = rollCurrencyType(r);
+      currency[c] = (currency[c] || 0) + 1;
+      state2.currency[c] += 1;
+    }
+    state2.rngState = r.getState();
+    state2.lifetime.runs += runs;
+    return {
+      seconds,
+      runs,
+      zoneName: zone.name,
+      xp,
+      levelsGained: state2.character.level - levelBefore,
+      items: itemCount,
+      kept,
+      salvaged,
+      scrap,
+      byRarity,
+      currency,
+      capped: secondsAway > capHours * 3600
+    };
+  }
   function serialize(state2) {
     return JSON.stringify(state2);
   }
@@ -2650,6 +2941,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   function migrate(data) {
     if (!data || typeof data !== "object" || !data.version) throw new Error("Not a Wallbreaker save.");
     if (data.version > SAVE_VERSION) throw new Error("Save is from a newer version.");
+    data.automation || (data.automation = { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] });
     if (data.version === 1) {
       data.character.skill = { id: data.character.skillId || "cleave", supports: [] };
       delete data.character.skillId;
@@ -2708,7 +3000,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     if (top) return top;
     return { threat: d.threat, type: d.type, taken: d.taken, hits: 1, biggestRaw: d.raw };
   }
-  function lookAtFor(type) {
+  function lookAtFor(type, threat) {
+    if (threat === "blight") return "Chaos resistance, life regeneration, killing Blight packs faster";
     if (type === "physical") return "Armour, Evasion, maximum Life";
     if (type === "chaos") return "Chaos resistance, Life regeneration";
     return `${cap(type)} resistance, maximum Life`;
@@ -2732,7 +3025,9 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       const n = counts[key(best)];
       const detailStat = k.type === "physical" ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, state2.zoneId);
       let message;
-      if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
+      if (k.threat === "blight") {
+        message = `Rotted away by Blight: its stacks dealt ${fmt(k.taken)} chaos damage over your last ${RECENT_SECONDS} seconds. Your chaos resistance is ${fmt(stats.res.chaos)}% and you regenerate ${fmt(stats.lifeRegen)} life per second.`;
+      } else if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
         const what = best.isBig && k.threat === "boss" ? "the boss's heavy blow" : threatLabel(k.threat);
         message = `Killed by a ${fmt(k.biggestRaw)} ${k.type} hit from ${what}. ${detailStat}`;
       } else {
@@ -2744,7 +3039,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         damageType: k.type,
         message,
         detail: `${deaths.length} deaths in your last ${runs.length} runs here (${n} mainly from ${k.type} damage by ${k.threat === "boss" ? "the boss" : `${THREATS[k.threat].name}s`}).`,
-        lookAt: lookAtFor(k.type)
+        lookAt: lookAtFor(k.type, k.threat)
       });
     }
     let worst = null;
@@ -2948,11 +3243,12 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     const list = Object.entries(res || {}).filter(([, v]) => v > 0);
     return list.length ? ` \xB7 resists ${list.map(([t, v]) => `<span class="dt-${t}">${t} ${v}%</span>`).join(", ")}` : "";
   }
-  function threatChip(m) {
+  function threatChip(m, zone) {
     const T2 = THREATS[m.threat];
     const type = m.threat === "caster" ? m.element : T2.damageType;
     const res = { ...T2.res || {} };
     if (m.threat === "caster" && T2.ownElementRes) res[m.element] = T2.ownElementRes;
+    if (zone && zone.monsterEleRes) for (const t of ["fire", "cold", "lightning"]) res[t] = (res[t] || 0) + zone.monsterEleRes;
     return `<span class="chip threat"><span class="dot dot-${type}"></span>${T2.name}${m.threat === "caster" ? ` (${m.element})` : ""} <span class="muted">${Math.round(m.share)}%${resText(res)}</span></span>`;
   }
   var STATUS = {
@@ -3003,6 +3299,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     ${bar("xp", ch.xp, need, "")}
     ${bar("life", Math.max(0, p.life), s.life, `Life ${fmt2(Math.max(0, p.life))} / ${fmt2(s.life)}`)}
     ${bar("mana", p.mana, s.mana, `Mana ${fmt2(p.mana)} / ${fmt2(s.mana)}`)}
+    ${p.blight && p.blight.length ? `<div class="blight small">Blight \xD7${p.blight.length}: losing ${fmt2(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, "chaos", state2.zoneId) / 100))} life per second</div>` : ""}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? "s" : ""}` : ""}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)}</b></div>
@@ -3045,8 +3342,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     }
     return `
     <div class="run-head">
-      <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} \xB7 ${progress}</div></div>
-      <div class="mix">${mixShares(zone).map(threatChip).join("")}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}<span class="muted">${resText(zone.boss.res)}</span></span></div>
+      <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} \xB7 ${progress}</div>${zoneResPenalty(zone.id) ? `<div class="small warn-line">Your elemental resistances are ${zoneResPenalty(zone.id)}% lower here.</div>` : ""}</div>
+      <div class="mix">${mixShares(zone).map((m) => threatChip(m, zone)).join("")}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}<span class="muted">${resText(zone.boss.res)}</span></span></div>
     </div>
     <div class="monsters">${monsters}</div>`;
   }
@@ -3444,6 +3741,46 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     <section class="tree-detail">${detail}</section>
   </div>`;
   }
+  var FAMILY_GROUPS = [
+    ["Defence", ["life", "armour", "ring_armour", "evasion", "piece_evasion", "life_regen"]],
+    ["Resistances", ["fire_res", "cold_res", "lightning_res", "chaos_res"]],
+    ["Attacks", ["phys_inc", "added_phys", "ring_added_phys", "attack_speed"]],
+    ["Spells and elements", ["spell_inc", "cast_speed", "ring_ele_inc", "ignite_chance", "shock_chance", "chill_effect"]],
+    ["General", ["amulet_damage", "crit_chance", "crit_multi", "targets", "mana", "mana_regen"]]
+  ];
+  function renderAutomation(state2) {
+    const a = state2.automation;
+    const check = (key, label, on) => `<label class="check"><input type="checkbox" id="auto-${key}" data-change="auto" data-key="${key}" ${on ? "checked" : ""}> ${label}</label>`;
+    const locked = (k) => `<p class="muted small">Locked. Unlocks on the first clear of zone ${AUTOMATION[k].zone}. ${AUTOMATION[k].text}</p>`;
+    const salv = automationUnlocked(state2, "autoSalvage") ? `${check("salvageNormal", "Salvage Normal items as they drop", a.salvageNormal)}` : locked("autoSalvage");
+    let filter = locked("lootFilter");
+    if (automationUnlocked(state2, "lootFilter")) {
+      const groups = FAMILY_GROUPS.map(([title, fams]) => `<fieldset class="fam-group"><legend>${title}</legend>${fams.map((f) => {
+        const fam = MODS[f];
+        const where = fam.slots.length > 3 ? "" : ` <span class="muted">(${fam.slots.map((x) => SLOT_NAMES[x].toLowerCase()).join(", ")})</span>`;
+        return `<label class="check"><input type="checkbox" id="keep-${f}" data-change="keep-family" data-family="${f}" ${a.keepFamilies.includes(f) ? "checked" : ""}> ${esc(fam.name)}${where}</label>`;
+      }).join("")}</fieldset>`).join("");
+      const types = ITEM_TYPES.map((t) => `<label class="check"><input type="checkbox" id="keeptype-${t}" data-change="keep-type" data-type="${t}" ${(a.keepTypes || []).includes(t) ? "checked" : ""}> ${SLOT_NAMES[t]}</label>`).join("");
+      filter = `${check("salvageMagic", "Salvage Magic items that have none of the mods below", a.salvageMagic)}
+      ${check("salvageRare", "Salvage Rare items that have none of the mods below", a.salvageRare)}
+      <h4>Mods worth keeping</h4><div class="fam-grid">${groups}</div>
+      <h4>Always keep these item types</h4><div class="type-row">${types}</div>`;
+    }
+    const last2 = state2.runHistory.slice(-10);
+    const auto = last2.reduce((x, r) => x + (r.autoSalvaged || 0), 0);
+    return `<div class="auto-grid">
+    <section><h3>${AUTOMATION.autoSalvage.name}</h3>${salv}
+      <h3>${AUTOMATION.lootFilter.name}</h3>${filter}
+      ${auto ? `<p class="muted small">Your rules salvaged ${auto} items over the last ${last2.length} runs.</p>` : ""}</section>
+    <section><h3>Coming later</h3>
+      <ul class="small muted tree-help">
+        <li><b>Map runner</b>: runs maps from a queue (needs maps).</li>
+        <li><b>Craft rules</b>: repeat a currency until a mod appears, with a spending limit (after your first league reset).</li>
+        <li><b>Upgrade advisor</b>: flags drops that would raise your damage or survivability (after your second league reset).</li>
+      </ul>
+      <p class="muted small">Salvaged items become Scrap, which the Smith and passive refunds use.</p></section>
+  </div>`;
+  }
 
   // src/ui/main.js
   var SAVE_KEY = "wallbreaker.save";
@@ -3470,12 +3807,31 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   }
   function save() {
     if (!state) return;
+    state.savedAt = Date.now();
     if (storageSet(SAVE_KEY, serialize(state))) {
       $("save-status").textContent = "Saved";
     } else {
       $("save-status").textContent = "Progress isn\u2019t being saved in this browser";
     }
     storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter, sort: ui.sort, rarity: ui.rarity }));
+  }
+  function fmtDuration(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.round(sec % 3600 / 60);
+    return h ? `${h}h ${m}m` : `${m}m`;
+  }
+  function showOffline(sum) {
+    if (!sum) return;
+    const body = sum.runs ? `<p>Your character kept farming <b>${sum.zoneName}</b> for ${fmtDuration(sum.seconds)}${sum.capped ? " (the most offline time that counts)" : ""}, at half the speed of active play.</p>
+      <ul class="offline-list">
+        <li><b>${sum.runs}</b> runs</li>
+        <li><b>${Math.round(sum.xp).toLocaleString("en-US")}</b> XP${sum.levelsGained ? `, <b>+${sum.levelsGained}</b> level${sum.levelsGained > 1 ? "s" : ""}` : ""}</li>
+        <li><b>${sum.items}</b> items (${sum.byRarity.rare} rare, ${sum.byRarity.magic} magic)${sum.salvaged ? `. Inventory filled up, so ${sum.salvaged} were salvaged for ${sum.scrap} Scrap` : ""}</li>
+        <li>${Object.entries(sum.currency).map(([c, n]) => `<b>${n}</b> ${CURRENCY[c].name}`).join(", ") || "No currency"}</li>
+      </ul>` : `<p>You were away for ${fmtDuration(sum.seconds)}. ${sum.reason}</p>`;
+    $("offline-body").innerHTML = body;
+    $("offline").hidden = false;
+    bump();
   }
   function notify(text, kind = "") {
     ui.message = text;
@@ -3525,6 +3881,8 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
       const inv2 = document.querySelector(".inv");
       if (inv2) inv2.scrollTop = scroll;
+    } else if (ui.tab === "auto") {
+      put("auto", renderAutomation(state));
     } else if (ui.tab === "tree") {
       put("tree", renderTree(state, ui));
     } else if (ui.tab === "skills") {
@@ -3533,6 +3891,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       put("sheet", renderSheet(state));
     }
     $("reset-confirm").hidden = !ui.confirmReset;
+    $("import-confirm").hidden = !ui.confirmImport;
     const t = $("toast");
     t.hidden = !ui.message;
     t.className = `toast ${ui.messageKind || ""}`;
@@ -3654,6 +4013,60 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         res = refundPassive(state, el.dataset.node);
         if (res.ok) notify(`Refunded for ${res.cost} Scrap.`, "good");
         break;
+      case "auto":
+        setAutomation(state, { [el.dataset.key]: el.checked });
+        break;
+      case "keep-family": {
+        const set = new Set(state.automation.keepFamilies);
+        if (el.checked) set.add(el.dataset.family);
+        else set.delete(el.dataset.family);
+        setAutomation(state, { keepFamilies: [...set] });
+        break;
+      }
+      case "keep-type": {
+        const set = new Set(state.automation.keepTypes || []);
+        if (el.checked) set.add(el.dataset.type);
+        else set.delete(el.dataset.type);
+        setAutomation(state, { keepTypes: [...set] });
+        break;
+      }
+      case "offline-close":
+        $("offline").hidden = true;
+        break;
+      case "export": {
+        save();
+        const text = serialize(state);
+        $("save-text").value = text;
+        navigator.clipboard?.writeText(text).then(
+          () => notify("Save copied to your clipboard. Keep it somewhere safe.", "good"),
+          () => {
+            $("save-text").select();
+            notify("Select the text in the box and copy it.");
+          }
+        ) ?? ($("save-text").select(), notify("Select the text in the box and copy it."));
+        break;
+      }
+      case "import-ask":
+        if (!$("save-text").value.trim()) {
+          notify("Paste a save into the box first.", "neg");
+          break;
+        }
+        ui.confirmImport = true;
+        break;
+      case "import-cancel":
+        ui.confirmImport = false;
+        break;
+      case "import-confirm":
+        ui.confirmImport = false;
+        try {
+          state = deserialize($("save-text").value.trim());
+          ui.selectedUid = null;
+          save();
+          notify("Save loaded.", "good");
+        } catch (err) {
+          notify(`That save couldn't be loaded: ${err.message}`, "neg");
+        }
+        break;
       case "reset-ask":
         ui.confirmReset = true;
         break;
@@ -3754,8 +4167,21 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       if (e.target.checked && state.zoneId !== state.progress.unlocked) selectZone(state, state.progress.unlocked);
       bump();
     });
+    let hiddenAt = null;
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) save();
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        save();
+      } else if (hiddenAt) {
+        const away = (Date.now() - hiddenAt) / 1e3;
+        hiddenAt = null;
+        if (away > MAX_CATCHUP_MS / 1e3) {
+          last = performance.now();
+          acc = 0;
+          showOffline(applyOffline(state, away));
+          save();
+        }
+      }
     });
     window.addEventListener("pagehide", save);
     setInterval(save, 3e4);
@@ -3771,6 +4197,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       }
     }
     if (!state) state = newGame();
+    if (!(data && data.save) && state.savedAt) showOffline(applyOffline(state, (Date.now() - state.savedAt) / 1e3));
     try {
       const u = JSON.parse(data && data.ui || storageGet(UI_KEY) || "{}");
       if (u.tab) ui.tab = u.tab;

@@ -63,6 +63,10 @@ export function makeMonster(rng, id, { zone, threatId, element, rarity = 'normal
   m.res = { ...(T.res || {}) };
   if (threatId === 'caster' && T.ownElementRes) m.res[damageType] = T.ownElementRes;
   if (isBoss && zone.boss.res) m.res = { ...zone.boss.res };
+  // Zone-wide elemental resistance (zone 8 on).
+  for (const t of ['fire', 'cold', 'lightning']) {
+    if (zone.monsterEleRes) m.res[t] = (m.res[t] || 0) + zone.monsterEleRes;
+  }
   // Active ailments: { ignite, shock, chill, stun } with remaining time.
   m.status = {};
   return m;

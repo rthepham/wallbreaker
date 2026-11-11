@@ -4,10 +4,10 @@ export const MONSTERS = {
   lifeBase: 15,
   lifeGrowth: 1.14,
   hitBase: 5,
-  hitGrowth: 1.10,
+  hitGrowth: 1.08,
   // Global knob for monster damage. 1.0 = doc values. Lowered because every
   // monster in a pack attacks at once, which the doc's per-hit numbers didn't account for.
-  damageScale: 0.4,
+  damageScale: 0.46,
   // Hits roll between (1 - variance) and (1 + variance) of their base.
   hitVariance: 0.2,
   xpBase: 2,
@@ -69,6 +69,19 @@ export const THREATS = {
       cold: ['Rime Acolyte', 'Frost Mage'],
       lightning: ['Storm Acolyte', 'Spark Mage'],
     },
+  },
+  // Blight: hits add a stack of chaos damage over time instead of dealing a hit.
+  // Can't be evaded or blocked by armour. Chaos resistance and regen answer it.
+  blight: {
+    name: 'Blight',
+    damageType: 'chaos',
+    interval: 1.5,
+    hitMult: 0.4, // damage per second per stack, as a share of a normal hit
+    lifeMult: 1.0,
+    xpMult: 1.2,
+    dropMult: 1,
+    stacks: { duration: 4, max: 5 },
+    names: ['Rotspawn', 'Blightmaw', 'Sporeling', 'Mire Leech'],
   },
   boss: {
     name: 'Boss',

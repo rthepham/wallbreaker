@@ -20,7 +20,14 @@ const mode = process.argv[4] || 'naive';
 
 function score(s) {
   const ehp = s.life + s.armour * 0.3 + s.evasion * 0.3;
-  const fire = 1 + Math.min(s.res.fire, 75) / 50;
+  // Value the resistances the current zone actually tests (capped at max).
+  const zone = getZone(currentZone);
+  const types = new Set();
+  for (const m of zone.mix) types.add(m.threat === 'caster' ? m.element : m.threat === 'blight' ? 'chaos' : null);
+  if (zone.boss.damageType !== 'physical') types.add(zone.boss.damageType);
+  types.delete(null);
+  let fire = 1;
+  for (const t of types) fire *= 1 + Math.min(s.res[t] - (t === 'chaos' ? 0 : zone.id >= 6 ? 20 : 0), 75) / 100;
   const d = s.damage;
   const reach = d.targets + d.splash * d.splashMult;
   const sustain = d.lifeCost ? 1 : Math.min(1, (s.manaRegen * 1.15) / d.manaPerSecond);
@@ -105,6 +112,7 @@ function spendPoints(state) {
   }
 }
 
+let currentZone = 1;
 const state = newGame(seed);
 const SKILL = process.env.SKILL || 'cleave';
 setSkill(state, SKILL);
@@ -119,6 +127,7 @@ for (let t = 0; t < totalTicks; t += 10) {
     lastRuns = state.lifetime.runs;
     const rec = state.runHistory[state.runHistory.length - 1];
     allRuns.push(rec);
+    currentZone = state.progress.unlocked;
     if (rec.outcome === 'cleared' && !firstClear[rec.zoneId]) firstClear[rec.zoneId] = state.time;
     spendPoints(state);
     bestLinks(state);
@@ -149,7 +158,7 @@ for (const r of allRuns) {
 }
 console.log('\nPer zone:');
 for (const [z, t] of Object.entries(tally)) console.log(`  z${z}: ${t.runs} runs, ${t.cleared} cleared, deaths ${JSON.stringify(t.deaths)}`);
-console.log('\nFirst clears (minutes):', Object.fromEntries(Object.entries(firstClear).map(([z, t]) => [z, (t / 60).toFixed(1)])));
+console.log('\nFirst clears (minutes):', JSON.stringify(Object.fromEntries(Object.entries(firstClear).map(([z, t]) => [z, Math.round(t / 60)]))));
 const s = getStats(state);
 const d = diagnose(state, s);
 console.log('Zone now:', state.zoneId, getZone(state.zoneId).name, 'deaths', state.lifetime.deaths);

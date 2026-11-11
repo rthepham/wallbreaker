@@ -37,4 +37,11 @@ export const RULES = {
   inventorySize: 120,
   combatLogSize: 150,
   runHistorySize: 30,
+  // Offline progress (doc section 10).
+  offline: {
+    minSeconds: 60, // shorter absences are ignored
+    capHours: 8,
+    efficiency: 0.5, // share of the active rate
+    sampleRuns: 10, // recent runs in the current zone used as the average
+  },
 };

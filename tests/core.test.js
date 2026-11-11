@@ -206,7 +206,8 @@ test('M1: a fresh character kills packs and gains XP in zone 1', () => {
 test('M2: a low-level character dies to fire in zone 4 and Diagnosis says so', () => {
   const g = newGame(2);
   g.progress.unlocked = 4;
-  g.character.level = 14;
+  g.character.level = 11;
+  g.autoAdvance = false; // stay in zone 4 even after a lucky clear
   startRun(g, 4);
   // Big damage so the character can clear packs and meet the casters.
   g.character.equipment.weapon.mods = [{ family: 'phys_inc', tier: 8, value: 400 }];

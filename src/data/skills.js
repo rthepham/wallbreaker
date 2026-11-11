@@ -121,7 +121,7 @@ export const LINKS = {
   base: 2,
   // DOC: doc unlocks the 3rd link at zone 6 and the 4th at map tier 1.
   // The prototype only has 5 zones, so they come earlier.
-  unlocks: [{ zone: 3, slots: 3 }, { zone: 5, slots: 4 }],
+  unlocks: [{ zone: 3, slots: 3 }, { zone: 5, slots: 4 }, { zone: 8, slots: 5 }],
   startingSupports: ['brutality'],
   // Chance a repeat boss kill drops a support you don't own.
   // A zone's first clear always gives one.

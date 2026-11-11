@@ -1,14 +1,15 @@
 // Builds HTML for each panel from game state. No game logic here.
 
-import { ZONES } from '../data/zones.js';
+import { ZONES, zoneResPenalty } from '../data/zones.js';
 import { THREATS } from '../data/monsters.js';
 import { BASES, MODS, SLOT_NAMES, EQUIP_SLOTS, ITEM_TYPES, slotsForType } from '../data/items.js';
 import { CURRENCY, CURRENCY_ORDER, CONVERSIONS } from '../data/currency.js';
 import { RULES } from '../data/player.js';
 import {
   getStats, getZone, xpToNext, statsWithItem, findItem, supportSlots, statsWithSkill,
-  passivePoints, passivesSpent, canAllocate, canRefund, refundCost, statsWithPassives,
+  passivePoints, passivesSpent, canAllocate, canRefund, refundCost, statsWithPassives, automationUnlocked,
 } from '../game.js';
+import { AUTOMATION } from '../data/automation.js';
 import { PASSIVES, PASSIVE_REGIONS } from '../data/passives.js';
 import { SKILLS, SKILL_ORDER, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from '../data/skills.js';
 import { maxHitTaken, effectiveRes, DAMAGE_TYPES } from '../stats.js';
@@ -37,11 +38,12 @@ function resText(res) {
   return list.length ? ` · resists ${list.map(([t, v]) => `<span class="dt-${t}">${t} ${v}%</span>`).join(', ')}` : '';
 }
 
-function threatChip(m) {
+function threatChip(m, zone) {
   const T = THREATS[m.threat];
   const type = m.threat === 'caster' ? m.element : T.damageType;
   const res = { ...(T.res || {}) };
   if (m.threat === 'caster' && T.ownElementRes) res[m.element] = T.ownElementRes;
+  if (zone && zone.monsterEleRes) for (const t of ['fire', 'cold', 'lightning']) res[t] = (res[t] || 0) + zone.monsterEleRes;
   return `<span class="chip threat"><span class="dot dot-${type}"></span>${T.name}${m.threat === 'caster' ? ` (${m.element})` : ''} <span class="muted">${Math.round(m.share)}%${resText(res)}</span></span>`;
 }
 
@@ -100,6 +102,7 @@ export function renderVitals(state) {
     ${bar('xp', ch.xp, need, '')}
     ${bar('life', Math.max(0, p.life), s.life, `Life ${fmt(Math.max(0, p.life))} / ${fmt(s.life)}`)}
     ${bar('mana', p.mana, s.mana, `Mana ${fmt(p.mana)} / ${fmt(s.mana)}`)}
+    ${p.blight && p.blight.length ? `<div class="blight small">Blight ×${p.blight.length}: losing ${fmt(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, 'chaos', state.zoneId) / 100))} life per second</div>` : ''}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? 's' : ''}` : ''}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt(d.hitMin)}–${fmt(d.hitMax)}</b></div>
@@ -147,8 +150,8 @@ export function renderRun(state) {
   }
   return `
     <div class="run-head">
-      <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} · ${progress}</div></div>
-      <div class="mix">${mixShares(zone).map(threatChip).join('')}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}<span class="muted">${resText(zone.boss.res)}</span></span></div>
+      <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} · ${progress}</div>${zoneResPenalty(zone.id) ? `<div class="small warn-line">Your elemental resistances are ${zoneResPenalty(zone.id)}% lower here.</div>` : ''}</div>
+      <div class="mix">${mixShares(zone).map((m) => threatChip(m, zone)).join('')}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}<span class="muted">${resText(zone.boss.res)}</span></span></div>
     </div>
     <div class="monsters">${monsters}</div>`;
 }
@@ -603,5 +606,51 @@ export function renderTree(state, ui) {
       <svg class="tree" id="tree-svg" viewBox="${ui.treeView ? ui.treeView.join(' ') : `${minX} ${minY} ${w} ${h}`}" data-full="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join('')}${regionLabels}${nodes}</svg>
     </section>
     <section class="tree-detail">${detail}</section>
+  </div>`;
+}
+
+// ---------- Automation ----------
+
+const FAMILY_GROUPS = [
+  ['Defence', ['life', 'armour', 'ring_armour', 'evasion', 'piece_evasion', 'life_regen']],
+  ['Resistances', ['fire_res', 'cold_res', 'lightning_res', 'chaos_res']],
+  ['Attacks', ['phys_inc', 'added_phys', 'ring_added_phys', 'attack_speed']],
+  ['Spells and elements', ['spell_inc', 'cast_speed', 'ring_ele_inc', 'ignite_chance', 'shock_chance', 'chill_effect']],
+  ['General', ['amulet_damage', 'crit_chance', 'crit_multi', 'targets', 'mana', 'mana_regen']],
+];
+
+export function renderAutomation(state) {
+  const a = state.automation;
+  const check = (key, label, on) => `<label class="check"><input type="checkbox" id="auto-${key}" data-change="auto" data-key="${key}" ${on ? 'checked' : ''}> ${label}</label>`;
+  const locked = (k) => `<p class="muted small">Locked. Unlocks on the first clear of zone ${AUTOMATION[k].zone}. ${AUTOMATION[k].text}</p>`;
+  const salv = automationUnlocked(state, 'autoSalvage')
+    ? `${check('salvageNormal', 'Salvage Normal items as they drop', a.salvageNormal)}`
+    : locked('autoSalvage');
+  let filter = locked('lootFilter');
+  if (automationUnlocked(state, 'lootFilter')) {
+    const groups = FAMILY_GROUPS.map(([title, fams]) => `<fieldset class="fam-group"><legend>${title}</legend>${fams.map((f) => {
+      const fam = MODS[f];
+      const where = fam.slots.length > 3 ? '' : ` <span class="muted">(${fam.slots.map((x) => SLOT_NAMES[x].toLowerCase()).join(', ')})</span>`;
+      return `<label class="check"><input type="checkbox" id="keep-${f}" data-change="keep-family" data-family="${f}" ${a.keepFamilies.includes(f) ? 'checked' : ''}> ${esc(fam.name)}${where}</label>`;
+    }).join('')}</fieldset>`).join('');
+    const types = ITEM_TYPES.map((t) => `<label class="check"><input type="checkbox" id="keeptype-${t}" data-change="keep-type" data-type="${t}" ${(a.keepTypes || []).includes(t) ? 'checked' : ''}> ${SLOT_NAMES[t]}</label>`).join('');
+    filter = `${check('salvageMagic', 'Salvage Magic items that have none of the mods below', a.salvageMagic)}
+      ${check('salvageRare', 'Salvage Rare items that have none of the mods below', a.salvageRare)}
+      <h4>Mods worth keeping</h4><div class="fam-grid">${groups}</div>
+      <h4>Always keep these item types</h4><div class="type-row">${types}</div>`;
+  }
+  const last = state.runHistory.slice(-10);
+  const auto = last.reduce((x, r) => x + (r.autoSalvaged || 0), 0);
+  return `<div class="auto-grid">
+    <section><h3>${AUTOMATION.autoSalvage.name}</h3>${salv}
+      <h3>${AUTOMATION.lootFilter.name}</h3>${filter}
+      ${auto ? `<p class="muted small">Your rules salvaged ${auto} items over the last ${last.length} runs.</p>` : ''}</section>
+    <section><h3>Coming later</h3>
+      <ul class="small muted tree-help">
+        <li><b>Map runner</b>: runs maps from a queue (needs maps).</li>
+        <li><b>Craft rules</b>: repeat a currency until a mod appears, with a spending limit (after your first league reset).</li>
+        <li><b>Upgrade advisor</b>: flags drops that would raise your damage or survivability (after your second league reset).</li>
+      </ul>
+      <p class="muted small">Salvaged items become Scrap, which the Smith and passive refunds use.</p></section>
   </div>`;
 }

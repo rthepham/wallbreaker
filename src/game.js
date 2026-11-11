@@ -9,12 +9,13 @@ import { CURRENCY_ORDER } from './data/currency.js';
 import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
 import { PASSIVES, PASSIVE_RULES } from './data/passives.js';
 import { AILMENTS } from './data/ailments.js';
+import { AUTOMATION, DEFAULT_AUTOMATION } from './data/automation.js';
 import { createRng } from './rng.js';
 import {
   computeStats, armourReduction, evadeChance, effectiveRes, itemLabel, damageTaken, monsterRes,
 } from './stats.js';
 import { makePack, makeBossPack } from './combat.js';
-import { makeItem, rollMonsterDrops } from './loot.js';
+import { makeItem, rollMonsterDrops, pickBase, rollRarity, rollCurrencyType } from './loot.js';
 import { craft, salvageValue, smithCraft, convert } from './crafting.js';
 
 export const SAVE_VERSION = 4;
@@ -93,6 +94,7 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
     nextUid: 1,
     nextMonsterId: 1,
     lifetime: { kills: 0, deaths: 0, runs: 0 },
+    automation: { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] },
   };
   const r = rng(state);
   // Starting gear: a plain weapon and armour, no ring.
@@ -133,6 +135,7 @@ export function startRun(state, zoneId) {
   state.player.life = s.life;
   state.player.mana = s.mana;
   state.player.attackTimer = 0;
+  state.player.blight = [];
   state.run = {
     zoneId,
     phase: 'travel',
@@ -244,7 +247,8 @@ function fightTick(state) {
     const pace = m.status.chill ? 1 - m.status.chill.slow / 100 : 1;
     m.attackTimer -= DT * pace;
     if (m.attackTimer <= 0) {
-      monsterHit(state, s, m, 1);
+      if (m.threat === 'blight') applyBlight(state, m);
+      else monsterHit(state, s, m, 1);
       m.attackTimer += m.interval;
       if (p.life <= 0) return playerDied(state, m);
     }
@@ -269,8 +273,40 @@ function fightTick(state) {
     return;
   }
 
-  // 3. Regen.
+  // 3. Damage over time, then regen.
+  if (tickBlight(state, s)) return;
   regen(state, DT);
+}
+
+function applyBlight(state, m) {
+  const p = state.player;
+  const B = THREATS.blight.stacks;
+  p.blight ||= [];
+  if (p.blight.length >= B.max) p.blight.shift();
+  p.blight.push({ dps: m.hit, time: B.duration });
+  state.run.blightSource = m;
+}
+
+// Returns true if the blight killed the player.
+function tickBlight(state, s) {
+  const p = state.player;
+  if (!p.blight || !p.blight.length) return false;
+  const raw = p.blight.reduce((a, b) => a + b.dps, 0) * DT;
+  const taken = damageTaken(s, 'chaos', raw, state.run.zoneId);
+  p.life -= taken;
+  const rec = state.run.record;
+  rec.damageByType.chaos = (rec.damageByType.chaos || 0) + taken;
+  const recent = (state.run.recentHits ||= []);
+  recent.push({ t: state.time, threat: 'blight', type: 'chaos', taken, raw, isBig: false, dot: true });
+  while (recent.length && recent[0].t < state.time - RECENT_SECONDS) recent.shift();
+  for (const b of p.blight) b.time -= DT;
+  p.blight = p.blight.filter((b) => b.time > 0);
+  if (p.life <= 0) {
+    state.run.lastHit = { raw, taken, type: 'chaos', isBig: false };
+    playerDied(state, state.run.blightSource || { name: 'Blight', damageType: 'chaos', threat: 'blight' });
+    return true;
+  }
+  return false;
 }
 
 function tickAilments(state, m) {
@@ -430,6 +466,7 @@ function packCleared(state) {
   const zone = getZone(run.zoneId);
   const seconds = state.time - run.packStart;
   pickUpLoot(state);
+  state.player.blight = [];
   if (run.pack.threat === 'boss') {
     rec.bossSeconds = seconds;
     runComplete(state);
@@ -443,10 +480,34 @@ function packCleared(state) {
   if (run.packIndex === zone.packs) log(state, 'info', 'The area falls quiet. The boss awaits.');
 }
 
+export function automationUnlocked(state, key) {
+  return state.progress.cleared.includes(AUTOMATION[key].zone);
+}
+
+// What the automation rules do with a dropped item: 'keep' or 'salvage'.
+export function lootAction(state, item) {
+  const a = state.automation || DEFAULT_AUTOMATION;
+  if ((a.keepTypes || []).includes(BASES[item.baseId].slot)) return 'keep';
+  if (item.rarity === 'normal') return automationUnlocked(state, 'autoSalvage') && a.salvageNormal ? 'salvage' : 'keep';
+  if (!automationUnlocked(state, 'lootFilter')) return 'keep';
+  const wanted = item.mods.some((m) => a.keepFamilies.includes(m.family));
+  if (item.rarity === 'magic' && a.salvageMagic && !wanted) return 'salvage';
+  if (item.rarity === 'rare' && a.salvageRare && !wanted) return 'salvage';
+  return 'keep';
+}
+
 function pickUpLoot(state) {
   const pl = state.run.pendingLoot;
   const rec = state.run.record;
+  let autoCount = 0;
+  let autoScrap = 0;
   for (const item of pl.items) {
+    if (lootAction(state, item) === 'salvage') {
+      autoCount++;
+      autoScrap += salvageValue(item);
+      rec.items++;
+      continue;
+    }
     if (state.inventory.length >= RULES.inventorySize) {
       log(state, 'warn', `Inventory full: left ${itemLabel(item)} behind.`);
       continue;
@@ -454,6 +515,10 @@ function pickUpLoot(state) {
     state.inventory.push(item);
     rec.items++;
     if (item.rarity !== 'normal') log(state, `loot ${item.rarity}`, `Picked up ${item.rarity} ${BASES[item.baseId].name}${item.name ? ` "${item.name}"` : ''}.`);
+  }
+  if (autoCount) {
+    state.scrap += autoScrap;
+    rec.autoSalvaged = (rec.autoSalvaged || 0) + autoCount;
   }
   for (const [c, n] of Object.entries(pl.currency)) {
     state.currency[c] += n;
@@ -770,6 +835,85 @@ export function statsWithPassives(state, passives) {
   return computeStats({ ...state.character, passives });
 }
 
+export function setAutomation(state, patch) {
+  state.automation = { ...state.automation, ...patch };
+  return { ok: true };
+}
+
+// ---------- Offline progress ----------
+
+// Averages from recent finished runs in the current zone, or null if there are none.
+export function offlineRates(state) {
+  const O = RULES.offline;
+  const runs = state.runHistory.filter((r) => r.zoneId === state.zoneId).slice(-O.sampleRuns);
+  if (!runs.length) return null;
+  const n = runs.length;
+  const sum = (f) => runs.reduce((a, r) => a + f(r), 0);
+  return {
+    zoneId: state.zoneId,
+    seconds: Math.max(10, sum((r) => r.end - r.start) / n),
+    xp: sum((r) => r.xp) / n,
+    items: sum((r) => r.items) / n,
+    currency: sum((r) => r.currency) / n,
+    deathRate: sum((r) => (r.outcome === 'died' ? 1 : 0)) / n,
+  };
+}
+
+// Grants rewards for time away, using recorded averages instead of simulating.
+// Returns a summary for the UI, or null if nothing happened.
+export function applyOffline(state, secondsAway, capHours = RULES.offline.capHours) {
+  const O = RULES.offline;
+  if (secondsAway < O.minSeconds) return null;
+  const seconds = Math.min(secondsAway, capHours * 3600);
+  const rates = offlineRates(state);
+  if (!rates) return { seconds, runs: 0, reason: 'No finished runs in this zone yet, so nothing was gained.' };
+  const runs = Math.floor((seconds / rates.seconds) * O.efficiency);
+  if (runs < 1) return { seconds, runs: 0, reason: 'Not long enough for a full run.' };
+  const r = rng(state);
+  const zone = getZone(rates.zoneId);
+  const levelBefore = state.character.level;
+  // The same over-level XP penalty as active play, re-checked as levels go up.
+  const factor = (L) => Math.max(0, 1 - Math.max(0, L - zone.level - PLAYER.xpGraceLevels) * PLAYER.xpPenaltyPerLevel);
+  const base = factor(levelBefore) > 0 ? rates.xp / factor(levelBefore) : 0;
+  let xp = 0;
+  for (let i = 0; i < runs; i++) {
+    const gain = base * factor(state.character.level);
+    xp += gain;
+    gainXp(state, gain);
+  }
+  // Items: roll real items so the inventory fills naturally; overflow becomes Scrap.
+  const itemCount = Math.round(rates.items * runs);
+  let kept = 0;
+  let salvaged = 0;
+  let scrap = 0;
+  const byRarity = { normal: 0, magic: 0, rare: 0 };
+  for (let i = 0; i < itemCount; i++) {
+    const item = makeItem(r, state.nextUid++, { baseId: pickBase(r, zone.level), ilvl: zone.level, rarity: rollRarity(r) });
+    byRarity[item.rarity]++;
+    if (state.inventory.length < RULES.inventorySize) {
+      state.inventory.push(item);
+      kept++;
+    } else {
+      salvaged++;
+      scrap += salvageValue(item);
+    }
+  }
+  state.scrap += scrap;
+  const currency = {};
+  const curCount = Math.round(rates.currency * runs);
+  for (let i = 0; i < curCount; i++) {
+    const c = rollCurrencyType(r);
+    currency[c] = (currency[c] || 0) + 1;
+    state.currency[c] += 1;
+  }
+  state.rngState = r.getState();
+  state.lifetime.runs += runs;
+  return {
+    seconds, runs, zoneName: zone.name, xp, levelsGained: state.character.level - levelBefore,
+    items: itemCount, kept, salvaged, scrap, byRarity, currency, capped: secondsAway > capHours * 3600,
+  };
+}
+
 // ---------- Saving ----------
 
 export function serialize(state) {
@@ -787,6 +931,8 @@ export function deserialize(text) {
 export function migrate(data) {
   if (!data || typeof data !== 'object' || !data.version) throw new Error('Not a Wallbreaker save.');
   if (data.version > SAVE_VERSION) throw new Error('Save is from a newer version.');
+  // Fields added without a version bump get defaults.
+  data.automation ||= { ...DEFAULT_AUTOMATION, keepFamilies: [...DEFAULT_AUTOMATION.keepFamilies] };
   if (data.version === 1) {
     // v2: skills and supports.
     data.character.skill = { id: data.character.skillId || 'cleave', supports: [] };

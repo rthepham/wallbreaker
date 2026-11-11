@@ -34,6 +34,7 @@
   --f-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --radius: 4px;
 }
+[hidden] { display: none !important; }
 html, body { background: var(--ground); color: var(--ink); }
 body {
   font-family: var(--f-body);
@@ -83,6 +84,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 
 /* Zones */
 .zones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.zone.locked { opacity: 0.6; }
 .zone { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; background: var(--panel); }
 .zone.current { border-color: var(--brass); background: var(--panel-2); box-shadow: inset 3px 0 0 var(--brass); }
 .zone-num { font-variant-numeric: lining-nums; font-family: var(--f-display); font-size: 1.4rem; color: var(--brass); width: 1.2em; text-align: center; }
@@ -142,6 +144,8 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .st { font-size: 0.68rem; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
 .st-fire { color: var(--t-fire); } .st-lightning { color: var(--t-lightning); } .st-cold { color: var(--t-cold); } .st-physical { color: var(--t-physical); }
 .dt-physical { color: var(--t-physical); }
+.blight { color: var(--t-chaos); font-weight: 500; }
+.warn-line { color: var(--t-fire); }
 .mon.r-magic .mon-name { color: var(--r-magic); }
 .mon.r-rare .mon-name { color: var(--r-rare); }
 .mon.r-boss .mon-name { color: var(--r-boss); font-weight: 600; }
@@ -301,6 +305,17 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
 .help li { margin-bottom: 4px; }
 .reset-box { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--rule); display: grid; gap: 8px; justify-items: start; }
 .reset-confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px; resize: vertical; }
+.overlay { position: fixed; inset: 0; background: rgba(8, 10, 14, 0.72); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.overlay-card { background: var(--panel); border: 1px solid var(--brass); border-radius: var(--radius); padding: 18px 20px; max-width: 460px; width: 100%; display: grid; gap: 10px; }
+.offline-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.auto-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; }
+.check { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; cursor: pointer; }
+.check input { accent-color: var(--brass); }
+.fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.fam-group { border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px 10px; margin: 0; font-size: 0.85rem; }
+.fam-group legend { color: var(--brass); font-family: var(--f-display); padding: 0 4px; }
+.type-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; }
 .danger { background: #8c2f25; border-color: #c2493b; color: #fff4ee; }
 
 @media (max-width: 1100px) {
@@ -309,7 +324,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   .zones { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 }
 @media (max-width: 760px) {
-  .board, .gear-grid, .sheet-grid, .skills-grid, .tree-grid { grid-template-columns: minmax(0, 1fr); }
+  .board, .gear-grid, .sheet-grid, .skills-grid, .tree-grid, .auto-grid { grid-template-columns: minmax(0, 1fr); }
   .board .fight { order: -2; }
   .board .diag { order: -1; }
   .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -322,7 +337,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
 
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–5 · skills · passive tree</span></div>
+    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–10</span></div>
     <div class="controls">
       <div class="speed" role="group" aria-label="Game speed">
         <button data-action="speed" data-speed="0" aria-pressed="false">Pause</button>
@@ -348,6 +363,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       <button role="tab" data-action="tab" data-tab="gear" aria-selected="true">Gear &amp; crafting</button>
       <button role="tab" data-action="tab" data-tab="skills" aria-selected="false">Skills</button>
       <button role="tab" data-action="tab" data-tab="tree" aria-selected="false">Passive tree <span id="tree-count" class="count-badge"></span></button>
+      <button role="tab" data-action="tab" data-tab="auto" aria-selected="false">Automation</button>
       <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
       <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
     </div>
@@ -355,6 +371,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
     <div data-panel="gear" id="gear" role="tabpanel"></div>
     <div data-panel="skills" id="skills" role="tabpanel" hidden></div>
     <div data-panel="tree" id="tree" role="tabpanel" hidden></div>
+    <div data-panel="auto" id="auto" role="tabpanel" hidden></div>
     <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
     <div data-panel="help" role="tabpanel" hidden>
       <div class="help">
@@ -370,6 +387,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
           <li><b>Damage types matter.</b> Fire sets enemies burning (great on bosses). Lightning shocks them so they take more damage. Cold chills them so they attack slower. Heavy physical hits stun. Some enemies resist a type: Brutes shrug off physical, casters resist their own element. The zone header shows who resists what.</li>
+          <li><b>Zones 6–10:</b> your elemental resistances are 20% lower, so re-cap them. <b>Blight</b> monsters stack chaos damage over time on you (up to 5 stacks): chaos resistance and life regeneration are the answer. From zone 8, monsters resist all elements a little.</li>
           <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
           <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>
         </ul>
@@ -383,6 +401,18 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
         <h3>Prototype check</h3>
         <p>Play for about 20 minutes. Zone 4 (Emberwatch) is full of fire casters. The question: is hitting that wall, understanding it, crafting through it and pushing on satisfying?</p>
         <p class="muted small">Your game saves in this browser every 30 seconds and when you leave the page.</p>
+        <h3>Back up your save</h3>
+        <p class="small muted">Your game saves in this browser. To keep a copy or move it to another browser, copy the save text and paste it back in later.</p>
+        <textarea id="save-text" rows="3" placeholder="Save text appears here, or paste one to load it" aria-label="Save text"></textarea>
+        <div class="actions">
+          <button data-action="export">Copy my save</button>
+          <button data-action="import-ask">Load save from text</button>
+        </div>
+        <div id="import-confirm" class="reset-confirm" hidden>
+          <span>This replaces your current game with the pasted one.</span>
+          <button class="danger" data-action="import-confirm">Replace my game</button>
+          <button data-action="import-cancel">Cancel</button>
+        </div>
         <div class="reset-box">
           <button data-action="reset-ask">Start a new character</button>
           <div id="reset-confirm" class="reset-confirm" hidden>
@@ -394,5 +424,12 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
       </div>
     </div>
   </section>
+</div>
+<div id="offline" class="overlay" role="dialog" aria-modal="true" aria-labelledby="offline-title" hidden>
+  <div class="overlay-card">
+    <h2 id="offline-title">While you were away</h2>
+    <div id="offline-body"></div>
+    <button class="primary" data-action="offline-close">Continue</button>
+  </div>
 </div>
 <script>/*__BUNDLE__*/</script>

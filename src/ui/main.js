@@ -2,12 +2,12 @@
 
 import {
   newGame, runTicks, serialize, deserialize, selectZone, setAutoAdvance, equip, unequip,
-  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, allocatePassive, refundPassive, passivePoints, passivesSpent,
+  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, applyOffline, setAutomation, allocatePassive, refundPassive, passivePoints, passivesSpent,
 } from '../game.js';
 import { CURRENCY } from '../data/currency.js';
 import { SKILLS } from '../data/skills.js';
 import {
-  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree,
+  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree, renderAutomation,
 } from './render.js';
 
 const SAVE_KEY = 'wallbreaker.save';
@@ -29,12 +29,37 @@ function storageSet(key, value) {
 
 function save() {
   if (!state) return;
+  state.savedAt = Date.now();
   if (storageSet(SAVE_KEY, serialize(state))) {
     $('save-status').textContent = 'Saved';
   } else {
     $('save-status').textContent = 'Progress isn’t being saved in this browser';
   }
   storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter, sort: ui.sort, rarity: ui.rarity }));
+}
+
+// ---------- Offline summary ----------
+
+function fmtDuration(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.round((sec % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function showOffline(sum) {
+  if (!sum) return;
+  const body = sum.runs
+    ? `<p>Your character kept farming <b>${sum.zoneName}</b> for ${fmtDuration(sum.seconds)}${sum.capped ? ' (the most offline time that counts)' : ''}, at half the speed of active play.</p>
+      <ul class="offline-list">
+        <li><b>${sum.runs}</b> runs</li>
+        <li><b>${Math.round(sum.xp).toLocaleString('en-US')}</b> XP${sum.levelsGained ? `, <b>+${sum.levelsGained}</b> level${sum.levelsGained > 1 ? 's' : ''}` : ''}</li>
+        <li><b>${sum.items}</b> items (${sum.byRarity.rare} rare, ${sum.byRarity.magic} magic)${sum.salvaged ? `. Inventory filled up, so ${sum.salvaged} were salvaged for ${sum.scrap} Scrap` : ''}</li>
+        <li>${Object.entries(sum.currency).map(([c, n]) => `<b>${n}</b> ${CURRENCY[c].name}`).join(', ') || 'No currency'}</li>
+      </ul>`
+    : `<p>You were away for ${fmtDuration(sum.seconds)}. ${sum.reason}</p>`;
+  $('offline-body').innerHTML = body;
+  $('offline').hidden = false;
+  bump();
 }
 
 function notify(text, kind = '') {
@@ -93,6 +118,8 @@ function render(force = false) {
     if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
     const inv2 = document.querySelector('.inv');
     if (inv2) inv2.scrollTop = scroll;
+  } else if (ui.tab === 'auto') {
+    put('auto', renderAutomation(state));
   } else if (ui.tab === 'tree') {
     put('tree', renderTree(state, ui));
   } else if (ui.tab === 'skills') {
@@ -101,6 +128,7 @@ function render(force = false) {
     put('sheet', renderSheet(state));
   }
   $('reset-confirm').hidden = !ui.confirmReset;
+  $('import-confirm').hidden = !ui.confirmImport;
   const t = $('toast');
   t.hidden = !ui.message;
   t.className = `toast ${ui.messageKind || ''}`;
@@ -228,6 +256,52 @@ function handle(action, el) {
       res = refundPassive(state, el.dataset.node);
       if (res.ok) notify(`Refunded for ${res.cost} Scrap.`, 'good');
       break;
+    case 'auto':
+      setAutomation(state, { [el.dataset.key]: el.checked });
+      break;
+    case 'keep-family': {
+      const set = new Set(state.automation.keepFamilies);
+      if (el.checked) set.add(el.dataset.family); else set.delete(el.dataset.family);
+      setAutomation(state, { keepFamilies: [...set] });
+      break;
+    }
+    case 'keep-type': {
+      const set = new Set(state.automation.keepTypes || []);
+      if (el.checked) set.add(el.dataset.type); else set.delete(el.dataset.type);
+      setAutomation(state, { keepTypes: [...set] });
+      break;
+    }
+    case 'offline-close':
+      $('offline').hidden = true;
+      break;
+    case 'export': {
+      save();
+      const text = serialize(state);
+      $('save-text').value = text;
+      navigator.clipboard?.writeText(text).then(
+        () => notify('Save copied to your clipboard. Keep it somewhere safe.', 'good'),
+        () => { $('save-text').select(); notify('Select the text in the box and copy it.'); },
+      ) ?? ($('save-text').select(), notify('Select the text in the box and copy it.'));
+      break;
+    }
+    case 'import-ask':
+      if (!$('save-text').value.trim()) { notify('Paste a save into the box first.', 'neg'); break; }
+      ui.confirmImport = true;
+      break;
+    case 'import-cancel':
+      ui.confirmImport = false;
+      break;
+    case 'import-confirm':
+      ui.confirmImport = false;
+      try {
+        state = deserialize($('save-text').value.trim());
+        ui.selectedUid = null;
+        save();
+        notify('Save loaded.', 'good');
+      } catch (err) {
+        notify(`That save couldn't be loaded: ${err.message}`, 'neg');
+      }
+      break;
     case 'reset-ask':
       ui.confirmReset = true;
       break;
@@ -335,7 +409,23 @@ function wire() {
     if (e.target.checked && state.zoneId !== state.progress.unlocked) selectZone(state, state.progress.unlocked);
     bump();
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  // Time spent in another tab beyond the normal catch-up counts as offline time.
+  let hiddenAt = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      save();
+    } else if (hiddenAt) {
+      const away = (Date.now() - hiddenAt) / 1000;
+      hiddenAt = null;
+      if (away > MAX_CATCHUP_MS / 1000) {
+        last = performance.now();
+        acc = 0;
+        showOffline(applyOffline(state, away));
+        save();
+      }
+    }
+  });
   window.addEventListener('pagehide', save);
   setInterval(save, 30_000);
 }
@@ -351,6 +441,8 @@ function boot(data) {
     }
   }
   if (!state) state = newGame();
+  // Offline progress (not for hot reloads, which carry live state).
+  if (!(data && data.save) && state.savedAt) showOffline(applyOffline(state, (Date.now() - state.savedAt) / 1000));
   try {
     const u = JSON.parse((data && data.ui) || storageGet(UI_KEY) || '{}');
     if (u.tab) ui.tab = u.tab;
