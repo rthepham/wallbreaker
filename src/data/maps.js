@@ -2,8 +2,9 @@
 
 export const MAP_RULES = {
   maxTier: 16,
-  // DOC: doc uses 52 + 2 x tier. Our zone 10 is level 42, so maps start just above it.
-  levelBase: 44,
+  // DOC: doc uses 52 + 2 x tier. Our zone 10 is level 42, so tier 1 matches it
+  // (the step up is the larger resistance penalty and map mods).
+  levelBase: 40,
   levelPerTier: 2,
   // DOC: doc says -40% resistances in maps. -30% keeps the 75% cap reachable with gear.
   resPenalty: 30,

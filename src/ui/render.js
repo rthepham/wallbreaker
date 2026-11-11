@@ -8,7 +8,10 @@ import { RULES } from '../data/player.js';
 import {
   getStats, getZone, xpToNext, statsWithItem, findItem, supportSlots, statsWithSkill,
   passivePoints, passivesSpent, canAllocate, canRefund, refundCost, statsWithPassives, automationUnlocked,
+  leagueAutomationUnlocked, smithDiscount, legacyRank, canStartLeague, legacyPointsForReset, heirloomSlots,
 } from '../game.js';
+import { LEGACY_UPGRADES, CHALLENGES, MECHANICS, LEAGUE_AUTOMATION } from '../data/league.js';
+import { eligibleFamilies } from '../loot.js';
 import { AUTOMATION } from '../data/automation.js';
 import { MAP_RULES, MAP_LAYOUTS, MAP_MODS } from '../data/maps.js';
 import { mapLevel, mapIiq, canCraftMap } from '../maps.js';
@@ -240,14 +243,24 @@ function craftPanel(state, item) {
     return `<button class="cur-btn" data-action="craft" data-cur="${c}" data-uid="${item.uid}" ${reason ? 'disabled' : ''} title="${esc(reason || CURRENCY[c].effect)}">
       <span>${CURRENCY[c].name}</span><span class="count">${state.currency[c]}</span><span class="cur-eff">${esc(CURRENCY[c].effect)}</span></button>`;
   }).join('');
-  const opts = smithOptions(item);
+  const opts = smithOptions(item, smithDiscount(state));
   const smith = opts.length
     ? `<div class="smith"><label for="smith-select">The Smith adds one mod of your choice</label>
         <div class="smith-row"><select id="smith-select">${opts.map((o) => `<option value="${o.family}">${esc(MODS[o.family].name)} (${MODS[o.family].type}, T${o.tier}) · ${o.cost} Scrap</option>`).join('')}</select>
         <button data-action="smith" data-uid="${item.uid}">Craft</button></div>
         <div class="muted small">You have ${fmt(state.scrap)} Scrap.${item.rarity === 'normal' ? ' A Normal item becomes Magic.' : ''}</div></div>`
     : `<div class="smith muted small">The Smith can't add anything here: no open mod slots. Ash resets the item to Normal.</div>`;
-  return `<div class="craft"><h4>Crafting</h4><div class="cur-grid">${buttons}</div>${smith}</div>`;
+  let rules = '';
+  if (leagueAutomationUnlocked(state, 'craftRules')) {
+    const fams = Object.keys(MODS).filter((f) => MODS[f].slots.includes(BASES[item.baseId].slot) && MODS[f].tiers.some((t) => t.ilvl <= item.ilvl));
+    rules = `<div class="smith"><label for="cr-fam">Craft rule: repeat a currency until a mod appears</label>
+      <div class="smith-row"><select id="cr-cur" aria-label="Currency">${['tempest', 'wildfire', 'kindling', 'forge', 'crown'].map((c) => `<option value="${c}">${CURRENCY[c].name} (${state.currency[c]})</option>`).join('')}</select>
+      <select id="cr-fam">${fams.map((f) => `<option value="${f}">${esc(MODS[f].name)}</option>`).join('')}</select>
+      <input id="cr-max" type="number" min="1" max="500" value="20" aria-label="Spend at most" class="num">
+      <button data-action="craft-until" data-uid="${item.uid}">Repeat</button></div>
+      <div class="muted small">Stops when the mod appears, the item can't take that currency, or the limit is spent.</div></div>`;
+  }
+  return `<div class="craft"><h4>Crafting</h4><div class="cur-grid">${buttons}</div>${smith}${rules}</div>`;
 }
 
 // What equipping `item` would change, as a few short chips, plus a sort score.
@@ -307,6 +320,7 @@ export function renderGear(state, ui) {
     type: (a, b) => ITEM_TYPES.indexOf(BASES[a.it.baseId].slot) - ITEM_TYPES.indexOf(BASES[b.it.baseId].slot) || b.idx - a.idx,
   };
   list.sort(sorters[sort] || sorters.new);
+  const advisor = leagueAutomationUnlocked(state, 'upgradeAdvisor');
 
   const counts = {};
   for (const it of state.inventory) counts[BASES[it.baseId].slot] = (counts[BASES[it.baseId].slot] || 0) + 1;
@@ -319,7 +333,7 @@ export function renderGear(state, ui) {
     </div>`;
   const rows = list.length
     ? list.map(({ it, ch }) => `<button class="inv-row ${sel && sel.item === it ? 'selected' : ''}" data-action="select" data-uid="${it.uid}">
-        <span class="r-${it.rarity} inv-name">${esc(itemTitle(it))}${it.locked ? ' <span class="lock">locked</span>' : ''}</span>
+        <span class="r-${it.rarity} inv-name">${advisor && ch.score > 0.03 ? '<span class="adv">Upgrade</span> ' : ''}${esc(itemTitle(it))}${it.locked ? ' <span class="lock">locked</span>' : ''}</span>
         <span class="muted small">${SLOT_NAMES[BASES[it.baseId].slot]} · ilvl ${it.ilvl}</span>
         <span class="inv-mods small">${it.mods.map((m) => esc(modText(m))).join(' · ') || `<span class="muted">${esc(BASES[it.baseId].name)}, no mods</span>`}</span>
         <span class="chgs">${ch.chips || '<span class="muted small">no change</span>'}</span></button>`).join('')
@@ -651,8 +665,7 @@ export function renderAutomation(state) {
     <section><h3>Coming later</h3>
       <ul class="small muted tree-help">
         ${automationUnlocked(state, 'mapRunner') ? '' : `<li><b>Map runner</b>: runs maps from your stash automatically (first clear of a tier ${AUTOMATION.mapRunner.mapTier} map).</li>`}
-        <li><b>Craft rules</b>: repeat a currency until a mod appears, with a spending limit (after your first league reset).</li>
-        <li><b>Upgrade advisor</b>: flags drops that would raise your damage or survivability (after your second league reset).</li>
+        ${Object.entries(LEAGUE_AUTOMATION).map(([k, A]) => `<li><b>${A.name}</b>: ${A.text} ${leagueAutomationUnlocked(state, k) ? '<span class="good">Unlocked.</span>' : `Unlocks after ${A.resets === 1 ? 'your first league reset' : `${A.resets} league resets`}.`}</li>`).join('')}
       </ul>
       <p class="muted small">Salvaged items become Scrap, which the Smith and passive refunds use.</p></section>
   </div>`;
@@ -721,5 +734,61 @@ export function renderMaps(state, ui) {
       <div class="inv">${list.map((m) => mapRow(m, sel === m)).join('') || '<p class="muted small empty">No maps. Clear zone 10 or a map to find more.</p>'}</div>
     </section>
     <section class="gear-right">${detail}</section>
+  </div>`;
+}
+
+// ---------- League ----------
+
+export function renderLeague(state, ui) {
+  const L = state.league;
+  const leg = state.legacy;
+  const mech = L.mechanic ? MECHANICS[L.mechanic] : null;
+  const head = `<div class="league-head"><h3>League ${L.number}${mech ? ` · ${mech.name}` : ' · Standard'}</h3>
+    <p class="small">${mech ? esc(mech.text) : 'The first league has no special mechanic. Each new league picks one at random.'}</p></div>`;
+  const chall = Object.entries(CHALLENGES).map(([id, c]) => {
+    const done = L.challenges.includes(id);
+    return `<li class="${done ? 'done' : ''}"><span class="tick" aria-hidden="true">${done ? '✓' : ''}</span>${esc(c.name)}</li>`;
+  }).join('');
+  const ups = Object.entries(LEGACY_UPGRADES).map(([id, U]) => {
+    const rank = legacyRank(state, id);
+    const maxed = rank >= U.max;
+    return `<div class="legacy-row"><div><b>${U.name}</b> <span class="muted small">${rank}/${U.max}</span><div class="small muted">${esc(U.text)}</div></div>
+      <button data-action="buy-legacy" data-id="${id}" ${maxed || leg.points < U.cost ? 'disabled' : ''}>${maxed ? 'Maxed' : `Buy · ${U.cost}`}</button></div>`;
+  }).join('');
+  const lockReason = canStartLeague(state);
+  let reset;
+  if (lockReason) {
+    reset = `<p class="muted small">${esc(lockReason)} You have cleared up to tier ${state.mapProgress.highest || 0}.</p>`;
+  } else {
+    const slots = heirloomSlots(state);
+    const chosen = ui.heirlooms || [];
+    const pool = [...Object.values(state.character.equipment).filter(Boolean), ...state.inventory.filter((i) => i.rarity !== 'normal')];
+    const opts = pool.map((it) => `<label class="check"><input type="checkbox" data-change="heirloom" data-uid="${it.uid}" ${chosen.includes(it.uid) ? 'checked' : ''} ${!chosen.includes(it.uid) && chosen.length >= slots ? 'disabled' : ''}> <span class="r-${it.rarity}">${esc(itemTitle(it))}</span> <span class="muted small">${SLOT_NAMES[BASES[it.baseId].slot]}</span></label>`).join('');
+    reset = `<p>Starting a new league earns <b>${legacyPointsForReset(state)}</b> Legacy points: ${state.mapProgress.highest} for your highest map tier and ${L.challenges.length} for challenges.</p>
+      <ul class="small tree-help">
+        <li><b>Resets:</b> level, passive tree, items, currency, Scrap, zone and map progress, support gems.</li>
+        <li><b>Keeps:</b> Legacy points and upgrades, automation you've unlocked, your automation settings, and ${slots} heirloom item${slots > 1 ? 's' : ''} (its mods drop to their lowest tier).</li>
+        <li>The next league gets a random mechanic.</li>
+      </ul>
+      <h4>Heirloom${slots > 1 ? 's' : ''} (${chosen.length}/${slots})</h4><div class="heirlooms">${opts || '<p class="muted small">No items to carry.</p>'}</div>
+      <div class="actions"><button class="primary" data-action="league-ask">Start league ${L.number + 1}</button></div>
+      <div class="reset-confirm" ${ui.confirmLeague ? '' : 'hidden'}><span>This wipes your character. Legacy, automation and heirlooms carry over.</span>
+        <button class="danger" data-action="league-confirm">Start the new league</button><button data-action="league-cancel">Not yet</button></div>`;
+  }
+  let shards = '';
+  if (L.mechanic === 'shards') {
+    const type = ui.shardType || 'ring';
+    const fams = Object.keys(MODS).filter((f) => MODS[f].slots.includes(type));
+    shards = `<h3>Shard forge</h3><p class="small">You have <b>${L.shards}</b> shards. ${MECHANICS.shards.shardsPerCraft} make a Rare item with the mod you choose at the best tier your progress allows.</p>
+      <div class="smith-row"><select id="shard-type" data-change="shard-type">${ITEM_TYPES.map((t) => `<option value="${t}" ${t === type ? 'selected' : ''}>${SLOT_NAMES[t]}</option>`).join('')}</select>
+      <select id="shard-fam">${fams.map((f) => `<option value="${f}">${esc(MODS[f].name)}</option>`).join('')}</select>
+      <button data-action="shard-craft" ${L.shards < MECHANICS.shards.shardsPerCraft ? 'disabled' : ''}>Forge</button></div>`;
+  }
+  return `<div class="auto-grid">
+    <section>${head}${shards}<h3>Challenges <span class="muted small">${L.challenges.length} / ${Object.keys(CHALLENGES).length}</span></h3><ul class="challenges">${chall}</ul>
+      <h3>New league</h3>${reset}</section>
+    <section><h3>Legacy <span class="muted small">${leg.points} point${leg.points === 1 ? '' : 's'} to spend · ${leg.resets} reset${leg.resets === 1 ? '' : 's'}</span></h3>
+      <div class="legacy">${ups}</div>
+      <p class="muted small">Legacy upgrades are permanent and apply in every league.</p></section>
   </div>`;
 }

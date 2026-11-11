@@ -2,12 +2,13 @@
 
 import {
   newGame, runTicks, serialize, deserialize, selectZone, setAutoAdvance, equip, unequip,
-  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, applyOffline, setAutomation, runMap, craftOnMap, discardMap, setMapRunner, allocatePassive, refundPassive, passivePoints, passivesSpent,
+  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, applyOffline, setAutomation, runMap, craftOnMap, discardMap, setMapRunner,
+  buyLegacy, startNewLeague, shardCraft, craftUntil, allocatePassive, refundPassive, passivePoints, passivesSpent,
 } from '../game.js';
 import { CURRENCY } from '../data/currency.js';
 import { SKILLS } from '../data/skills.js';
 import {
-  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree, renderAutomation, renderMaps,
+  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree, renderAutomation, renderMaps, renderLeague,
 } from './render.js';
 
 const SAVE_KEY = 'wallbreaker.save';
@@ -98,7 +99,7 @@ function render(force = false) {
 
   // The lower panels only re-render when something they show has changed,
   // so dropdowns and scroll positions aren't reset 10 times a second.
-  const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(',')}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}|${state.maps.length}|${state.run.zoneId}|${state.mapProgress.cleared.length}`;
+  const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(',')}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}|${state.maps.length}|${state.run.zoneId}|${state.mapProgress.cleared.length}|${state.league.shards}|${state.league.challenges.length}|${state.legacy.points}`;
   if (!force && sig === lowerSig) return;
   lowerSig = sig;
   if (ui.tab === 'gear') {
@@ -118,6 +119,8 @@ function render(force = false) {
     if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
     const inv2 = document.querySelector('.inv');
     if (inv2) inv2.scrollTop = scroll;
+  } else if (ui.tab === 'league') {
+    put('league', renderLeague(state, ui));
   } else if (ui.tab === 'maps') {
     put('maps', renderMaps(state, ui));
   } else if (ui.tab === 'auto') {
@@ -294,6 +297,46 @@ function handle(action, el) {
     case 'map-order':
       setMapRunner(state, { order: el.value });
       break;
+    case 'buy-legacy':
+      res = buyLegacy(state, el.dataset.id);
+      if (res.ok) notify('Legacy upgrade bought.', 'good');
+      break;
+    case 'heirloom': {
+      const set = new Set(ui.heirlooms || []);
+      if (el.checked) set.add(uid); else set.delete(uid);
+      ui.heirlooms = [...set];
+      break;
+    }
+    case 'league-ask':
+      ui.confirmLeague = true;
+      break;
+    case 'league-cancel':
+      ui.confirmLeague = false;
+      break;
+    case 'league-confirm':
+      ui.confirmLeague = false;
+      res = startNewLeague(state, ui.heirlooms || []);
+      if (res.ok) {
+        state = res.state;
+        ui.heirlooms = [];
+        ui.selectedUid = null;
+        save();
+        notify(`A new league begins. +${res.earned} Legacy points.`, 'good');
+      }
+      break;
+    case 'shard-type':
+      ui.shardType = el.value;
+      break;
+    case 'shard-craft':
+      res = shardCraft(state, ui.shardType || 'ring', $('shard-fam').value);
+      if (res.ok) notify('The shards form a Rare item. It is in your inventory.', 'good');
+      break;
+    case 'craft-until': {
+      const fam = $('cr-fam').value;
+      res = craftUntil(state, uid, $('cr-cur').value, fam, Math.max(1, Number($('cr-max').value) || 1));
+      if (res.ok) notify(res.found ? `Done: the mod appeared after ${res.spent} uses.` : `Spent ${res.spent} without hitting it${res.reason ? `: ${res.reason}` : '.'}`, res.found ? 'good' : '');
+      break;
+    }
     case 'offline-close':
       $('offline').hidden = true;
       break;

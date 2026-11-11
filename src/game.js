@@ -6,17 +6,19 @@ import { MONSTERS, THREATS } from './data/monsters.js';
 import { ZONES, areaById, registerArea } from './data/zones.js';
 import { MAP_RULES } from './data/maps.js';
 import { makeMap, mapArea, rollMapDrops, craftMap } from './maps.js';
-import { BASES, EQUIP_SLOTS, slotsForType } from './data/items.js';
+import { BASES, EQUIP_SLOTS, slotsForType, MODS } from './data/items.js';
 import { CURRENCY_ORDER } from './data/currency.js';
 import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
 import { PASSIVES, PASSIVE_RULES } from './data/passives.js';
 import { AILMENTS } from './data/ailments.js';
 import { AUTOMATION, DEFAULT_AUTOMATION } from './data/automation.js';
+import { LEAGUE_RULES, LEGACY_UPGRADES, CHALLENGES, MECHANICS, LEAGUE_AUTOMATION } from './data/league.js';
+import { tiersAt, addRandomMod, setRarity, pickBase as pickBaseOf } from './loot.js';
 import { createRng } from './rng.js';
 import {
   computeStats, armourReduction, evadeChance, effectiveRes, itemLabel, damageTaken, monsterRes,
 } from './stats.js';
-import { makePack, makeBossPack } from './combat.js';
+import { makePack, makeBossPack, makeMonster } from './combat.js';
 import { makeItem, rollMonsterDrops, pickBase, rollRarity, rollCurrencyType } from './loot.js';
 import { craft, salvageValue, smithCraft, convert } from './crafting.js';
 
@@ -100,6 +102,8 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
     maps: [],
     mapProgress: { cleared: [], highest: 0 },
     mapRunner: { on: false, order: 'highest' },
+    legacy: newLegacy(),
+    league: { number: 1, mechanic: null, challenges: [], shards: 0, start: 0, zone10Deaths: 0 },
   };
   const r = rng(state);
   // Starting gear: a plain weapon and armour, no ring.
@@ -154,6 +158,12 @@ export function startRun(state, zoneId) {
     lastHit: null,
     record: newRecord(state, zoneId),
   };
+  // League mechanics that roll per run.
+  const area = getZone(zoneId);
+  const mech = state.league && state.league.mechanic;
+  const r = rng(state);
+  if (mech === 'rifts' && r.chance(MECHANICS.rifts.chance)) state.run.rift = r.int(2, area.packs - 2);
+  if (mech === 'bounties') state.run.bounty = r.int(0, area.packs - 1);
 }
 
 function regen(state, dt, outOfCombat = false) {
@@ -214,8 +224,33 @@ function spawnNext(state) {
   const run = state.run;
   const zone = getZone(run.zoneId);
   const r = rng(state);
-  if (run.packIndex < zone.packs) {
+  if (run.rift === run.packIndex && !run.riftDone) {
+    // Rift League: an extra wave with double drops. Doesn't count as a pack.
+    const R = MECHANICS.rifts;
+    const pack = { threat: 'rift', rift: true, monsters: [] };
+    for (let i = 0; i < R.size; i++) {
+      const entry = r.weighted(zone.mix);
+      const m = makeMonster(r, newMonsterId(state), { zone, threatId: entry.threat, element: entry.element });
+      m.dropMult *= R.dropMult;
+      m.name = `Rift ${m.name}`;
+      pack.monsters.push(m);
+    }
+    run.pack = pack;
+    run.riftDone = true;
+    log(state, 'boss', 'A rift tears open! Its monsters drop double loot.');
+  } else if (run.packIndex < zone.packs) {
     run.pack = makePack(r, zone, newMonsterId(state));
+    if (run.bounty === run.packIndex) {
+      const m = run.pack.monsters[0];
+      if (m.rarity !== 'rare') {
+        m.maxLife *= 4;
+        m.life = m.maxLife;
+        m.rarity = 'rare';
+      }
+      m.bounty = true;
+      m.name = `Marked ${m.name}`;
+      log(state, 'boss', `${m.name} carries a bounty.`);
+    }
   } else {
     run.pack = makeBossPack(r, zone, newMonsterId(state));
     run.record.bossStart = state.time;
@@ -456,11 +491,24 @@ function monsterKilled(state, m) {
   let xp = MONSTERS.xpBase * MONSTERS.xpGrowth ** m.level * m.xpMult;
   const over = L - m.level - PLAYER.xpGraceLevels;
   if (over > 0) xp *= Math.max(0, 1 - over * PLAYER.xpPenaltyPerLevel);
+  if (typeof state.run.zoneId === 'number') xp *= 1 + 0.2 * legacyRank(state, 'quick_study');
   gainXp(state, xp);
   rec.xp += xp;
   // Drops wait in the pack's loot pile until the pack is cleared.
-  const drops = rollMonsterDrops(rng(state), m, newUid(state));
+  const fortune = 1 + 0.05 * legacyRank(state, 'fortune');
+  const drops = rollMonsterDrops(rng(state), { ...m, dropMult: m.dropMult * fortune }, newUid(state));
   const pl = state.run.pendingLoot;
+  const mech = state.league.mechanic;
+  if (mech === 'shards' && !m.isBoss && rng(state).chance(MECHANICS.shards.shardChance * fortune)) state.league.shards++;
+  if (m.bounty) {
+    const [lo, hi] = MECHANICS.bounties.currency;
+    const n = rng(state).int(lo, hi);
+    for (let i = 0; i < n; i++) {
+      const c = rollCurrencyType(rng(state));
+      pl.currency[c] = (pl.currency[c] || 0) + 1;
+    }
+    log(state, 'loot currency', `The bounty pays out ${n} currency.`);
+  }
   pl.items.push(...drops.items);
   for (const [c, n] of Object.entries(drops.currency)) pl.currency[c] = (pl.currency[c] || 0) + n;
   if (m.isBoss || m.rarity === 'rare') log(state, 'kill', `${m.name} dies.`);
@@ -494,6 +542,12 @@ function packCleared(state) {
     runComplete(state);
     return;
   }
+  if (run.pack.rift) {
+    run.pack = null;
+    run.phase = 'travel';
+    run.timer = RULES.travelSeconds;
+    return;
+  }
   rec.packs.push({ threat: run.pack.threat, element: run.pack.element, seconds, size: run.pack.monsters.length });
   run.packIndex++;
   run.pack = null;
@@ -504,6 +558,7 @@ function packCleared(state) {
 
 export function automationUnlocked(state, key) {
   const A = AUTOMATION[key];
+  if (state.legacy && state.legacy.automation.includes(key)) return true;
   if (A.mapTier) return !!state.mapProgress && state.mapProgress.cleared.includes(A.mapTier);
   return state.progress.cleared.includes(A.zone);
 }
@@ -559,6 +614,7 @@ function finishRecord(state, outcome) {
   state.runHistory.push(rec);
   if (state.runHistory.length > RULES.runHistorySize) state.runHistory.shift();
   state.lifetime.runs++;
+  checkChallenges(state, outcome);
 }
 
 function runComplete(state) {
@@ -600,6 +656,10 @@ function mapComplete(state) {
     if (MAP_RULES.bonusPointTiers.includes(map.tier)) log(state, 'level', 'You gain 2 passive points.');
     if (map.tier === AUTOMATION.mapRunner.mapTier) log(state, 'clear', 'Map runner unlocked (Automation tab).');
     grantSupport(state);
+  }
+  if (state.league.mechanic === 'echoes' && rng(state).chance(MECHANICS.echoes.chance)) {
+    addMaps(state, [{ ...map, uid: state.nextUid++ }]);
+    log(state, 'loot rare', 'The map echoes: you can run it again.');
   }
   const drops = rollMapDrops(rng(state), map, mp.highest, newUid(state));
   addMaps(state, drops);
@@ -694,6 +754,7 @@ function playerDied(state, killer) {
     atBoss: killer.isBoss,
   });
   state.lifetime.deaths++;
+  if (run.zoneId === 10) state.league.zone10Deaths++;
   const ch = state.character;
   const loss = xpToNext(ch.level) * PLAYER.deathXpLossPct;
   ch.xp = Math.max(0, ch.xp - loss);
@@ -788,7 +849,7 @@ export function craftItem(state, currencyId, uid) {
 export function smithItem(state, uid, familyId) {
   const f = findItem(state, uid);
   if (!f) return { ok: false, reason: 'Item not found.' };
-  const res = smithCraft(rng(state), f.item, familyId, state.scrap);
+  const res = smithCraft(rng(state), f.item, familyId, state.scrap, smithDiscount(state));
   if (res.ok) {
     state.scrap -= res.cost;
     if (f.where !== 'inventory') invalidateStats(state);
@@ -828,7 +889,8 @@ export function statsWithItem(state, item, wanted = null) {
 export function supportSlots(state) {
   let links = LINKS.base;
   for (const u of LINKS.unlocks) if (state.progress.cleared.includes(u.zone)) links = Math.max(links, u.slots);
-  return links - 1;
+  links += legacyRank(state, 'head_start');
+  return Math.min(5, links) - 1;
 }
 
 function grantSupport(state) {
@@ -966,7 +1028,11 @@ export function offlineRates(state) {
 
 // Grants rewards for time away, using recorded averages instead of simulating.
 // Returns a summary for the UI, or null if nothing happened.
-export function applyOffline(state, secondsAway, capHours = RULES.offline.capHours) {
+export function offlineCapHours(state) {
+  return RULES.offline.capHours + 2 * legacyRank(state, 'long_absence');
+}
+
+export function applyOffline(state, secondsAway, capHours = offlineCapHours(state)) {
   const O = RULES.offline;
   if (secondsAway < O.minSeconds) return null;
   const seconds = Math.min(secondsAway, capHours * 3600);
@@ -1019,6 +1085,159 @@ export function applyOffline(state, secondsAway, capHours = RULES.offline.capHou
   };
 }
 
+// ---------- Leagues and Legacy ----------
+
+function newLegacy() {
+  return { points: 0, earnedTotal: 0, upgrades: {}, resets: 0, automation: [] };
+}
+
+export function legacyRank(state, id) {
+  return (state.legacy && state.legacy.upgrades[id]) || 0;
+}
+
+export function smithDiscount(state) {
+  return 0.15 * legacyRank(state, 'smiths_favor');
+}
+
+export function leagueAutomationUnlocked(state, key) {
+  return (state.legacy ? state.legacy.resets : 0) >= LEAGUE_AUTOMATION[key].resets;
+}
+
+function completeChallenge(state, id) {
+  if (state.league.challenges.includes(id)) return;
+  state.league.challenges.push(id);
+  log(state, 'clear', `Challenge complete: ${CHALLENGES[id].name}. (+1 Legacy point at your next league)`);
+}
+
+function checkChallenges(state, outcome) {
+  const L = state.league;
+  const ch = state.character;
+  const run = state.run;
+  if (ch.level >= 30) completeChallenge(state, 'level_30');
+  if (ch.level >= 50) completeChallenge(state, 'level_50');
+  if (state.progress.cleared.includes(10) || (outcome === 'cleared' && run.zoneId === 10)) completeChallenge(state, 'zone10');
+  if (outcome === 'cleared' && run.zoneId === 10 && L.zone10Deaths === 0) completeChallenge(state, 'zone10_no_death');
+  if (outcome === 'cleared' && run.zoneId === 5 && state.time - L.start <= 1800) completeChallenge(state, 'zone5_fast');
+  if (outcome === 'cleared' && run.map) {
+    const m = run.map;
+    if (m.tier >= 4) completeChallenge(state, 'map_t4');
+    if (m.tier >= 12) completeChallenge(state, 'map_t12');
+    if (m.tier >= 8 && getStats(state).keystones.length) completeChallenge(state, 'map_t8_keystone');
+    if (m.mods.includes('withering')) completeChallenge(state, 'withering_clean');
+    if (m.rarity === 'rare') completeChallenge(state, 'rare_map');
+  }
+  if (SUPPORT_ORDER.every((id) => state.ownedSupports.includes(id))) completeChallenge(state, 'all_supports');
+  if (Object.values(ch.equipment).some((it) => it && it.mods.length >= 6)) completeChallenge(state, 'six_mods');
+}
+
+export function canStartLeague(state) {
+  if (!state.mapProgress.cleared.some((t) => t >= LEAGUE_RULES.unlockMapTier)) {
+    return `Clear a tier ${LEAGUE_RULES.unlockMapTier} map to unlock new leagues.`;
+  }
+  return null;
+}
+
+export function legacyPointsForReset(state) {
+  return state.mapProgress.highest + state.league.challenges.length;
+}
+
+export function heirloomSlots(state) {
+  return 1 + legacyRank(state, 'second_heirloom');
+}
+
+// An heirloom keeps its base and mods, but every mod drops to its lowest tier.
+export function scaleHeirloom(item) {
+  const out = { ...item, ilvl: 1, locked: true, mods: [] };
+  for (const m of item.mods) {
+    const fam = MODS[m.family];
+    const cur = fam.tiers.find((t) => t.tier === m.tier) || fam.tiers[0];
+    const low = fam.tiers[0];
+    const share = cur.max > cur.min ? (m.value - cur.min) / (cur.max - cur.min) : 1;
+    out.mods.push({ family: m.family, tier: low.tier, value: Math.round(low.min + share * (low.max - low.min)) });
+  }
+  return out;
+}
+
+// Starts a new league. Returns the new state (the old one is left untouched).
+export function startNewLeague(state, heirloomUids = [], seed = (state.rngState ^ 0x9e3779b9) >>> 0) {
+  const reason = canStartLeague(state);
+  if (reason) return { ok: false, reason };
+  if (heirloomUids.length > heirloomSlots(state)) return { ok: false, reason: `You can carry ${heirloomSlots(state)} item(s).` };
+  const earned = legacyPointsForReset(state);
+  const fresh = newGame(seed);
+  const legacy = JSON.parse(JSON.stringify(state.legacy));
+  legacy.points += earned;
+  legacy.earnedTotal += earned;
+  legacy.resets += 1;
+  for (const key of Object.keys(AUTOMATION)) if (automationUnlocked(state, key) && !legacy.automation.includes(key)) legacy.automation.push(key);
+  fresh.legacy = legacy;
+  fresh.automation = JSON.parse(JSON.stringify(state.automation));
+  fresh.mapRunner = { ...state.mapRunner };
+  fresh.lifetime = { ...state.lifetime };
+  const mechs = Object.keys(MECHANICS);
+  fresh.league = {
+    number: state.league.number + 1,
+    mechanic: mechs[(state.league.number + seed) % mechs.length],
+    challenges: [], shards: 0, start: 0, zone10Deaths: 0,
+  };
+  for (const uid of heirloomUids) {
+    const f = findItem(state, uid);
+    if (f) fresh.inventory.push({ ...scaleHeirloom(f.item), uid: fresh.nextUid++ });
+  }
+  log(fresh, 'clear', `League ${fresh.league.number} begins: ${MECHANICS[fresh.league.mechanic].name}. You earned ${earned} Legacy points.`);
+  invalidateStats(fresh);
+  return { ok: true, state: fresh, earned };
+}
+
+export function buyLegacy(state, id) {
+  const U = LEGACY_UPGRADES[id];
+  const rank = legacyRank(state, id);
+  if (rank >= U.max) return { ok: false, reason: 'Already at max rank.' };
+  if (state.legacy.points < U.cost) return { ok: false, reason: `Needs ${U.cost} Legacy points.` };
+  state.legacy.points -= U.cost;
+  state.legacy.upgrades[id] = rank + 1;
+  invalidateStats(state);
+  return { ok: true };
+}
+
+// Shard League: spend shards on a Rare with a chosen mod family at the best tier available.
+export function shardCraft(state, type, familyId) {
+  const need = MECHANICS.shards.shardsPerCraft;
+  if (state.league.mechanic !== 'shards') return { ok: false, reason: 'Shards only exist in the Shard League.' };
+  if (state.league.shards < need) return { ok: false, reason: `Needs ${need} shards.` };
+  const fam = MODS[familyId];
+  if (!fam || !fam.slots.includes(type)) return { ok: false, reason: 'That mod cannot roll on that item type.' };
+  const ilvl = Math.max(getZone(state.zoneId).level, state.mapProgress.highest ? MAP_RULES.levelBase + MAP_RULES.levelPerTier * state.mapProgress.highest : 0);
+  const tiers = tiersAt(familyId, ilvl);
+  if (!tiers.length) return { ok: false, reason: 'Your item level is too low for that mod.' };
+  if (state.inventory.length >= RULES.inventorySize) return { ok: false, reason: 'Inventory is full.' };
+  const r = rng(state);
+  const item = { uid: state.nextUid++, baseId: pickBaseOf(r, ilvl, type), ilvl, rarity: 'normal', name: null, mods: [] };
+  setRarity(r, item, 'rare');
+  const t = tiers[tiers.length - 1];
+  item.mods.push({ family: familyId, tier: t.tier, value: r.int(t.min, t.max) });
+  const extra = r.int(2, 4);
+  for (let i = 0; i < extra; i++) addRandomMod(r, item);
+  state.league.shards -= need;
+  state.inventory.push(item);
+  state.rngState = r.getState();
+  return { ok: true, item };
+}
+
+// Craft rules: repeat a currency until the item has a chosen mod family, within a budget.
+export function craftUntil(state, uid, currencyId, familyId, maxSpend) {
+  const f = findItem(state, uid);
+  if (!f) return { ok: false, reason: 'Item not found.' };
+  if (!leagueAutomationUnlocked(state, 'craftRules')) return { ok: false, reason: 'Craft rules unlock after your first league reset.' };
+  let spent = 0;
+  while (spent < maxSpend && !f.item.mods.some((m) => m.family === familyId)) {
+    const res = craftItem(state, currencyId, uid);
+    if (!res.ok) return { ok: spent > 0, spent, found: false, reason: res.reason };
+    spent++;
+  }
+  return { ok: true, spent, found: f.item.mods.some((m) => m.family === familyId) };
+}
+
 // ---------- Saving ----------
 
 export function serialize(state) {
@@ -1042,6 +1261,8 @@ export function migrate(data) {
   data.maps ||= [];
   data.mapProgress ||= { cleared: [], highest: 0 };
   data.mapRunner ||= { on: false, order: 'highest' };
+  data.legacy ||= newLegacy();
+  data.league ||= { number: 1, mechanic: null, challenges: [], shards: 0, start: 0, zone10Deaths: 0 };
   if (data.version === 1) {
     // v2: skills and supports.
     data.character.skill = { id: data.character.skillId || 'cleave', supports: [] };

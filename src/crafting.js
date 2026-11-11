@@ -78,17 +78,18 @@ export function smithCost(tier) {
 }
 
 // Families the Smith could add. A Normal item is upgraded to Magic first.
-export function smithOptions(item) {
+// discount: share of the Scrap cost removed (Smith's Favor).
+export function smithOptions(item, discount = 0) {
   const asItem = item.rarity === 'normal' ? { ...item, rarity: 'magic' } : item;
   const types = openAffixTypes(asItem);
   return eligibleFamilies(asItem, types).map((family) => {
     const tier = smithTier(family, item.ilvl);
-    return { family, tier, cost: smithCost(tier) };
+    return { family, tier, cost: Math.max(1, Math.round(smithCost(tier) * (1 - discount))) };
   });
 }
 
-export function smithCraft(rng, item, familyId, scrap) {
-  const opt = smithOptions(item).find((o) => o.family === familyId);
+export function smithCraft(rng, item, familyId, scrap, discount = 0) {
+  const opt = smithOptions(item, discount).find((o) => o.family === familyId);
   if (!opt) return { ok: false, reason: 'That mod cannot be added to this item.' };
   if (scrap < opt.cost) return { ok: false, reason: `Needs ${opt.cost} Scrap. You have ${scrap}.` };
   if (item.rarity === 'normal') setRarity(rng, item, 'magic');

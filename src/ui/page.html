@@ -321,6 +321,16 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
 .tier-cell.done { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
 .tier-cell i { position: absolute; top: 0; right: 2px; font-size: 0.6rem; font-style: normal; }
 .runner { display: grid; gap: 4px; margin: 8px 0; }
+.challenges { list-style: none; padding: 0; margin: 0; display: grid; gap: 3px; font-size: 0.88rem; }
+.challenges li { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+.challenges li.done { color: var(--ink); }
+.tick { width: 1.2em; height: 1.2em; border: 1px solid var(--rule); border-radius: 3px; display: inline-grid; place-items: center; color: var(--brass-ink); font-size: 0.75rem; flex: none; }
+.challenges li.done .tick { background: var(--good); border-color: var(--good); }
+.legacy { display: grid; gap: 6px; }
+.legacy-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--radius); }
+.heirlooms { display: grid; gap: 2px; max-height: 220px; overflow-y: auto; }
+.adv { font-size: 0.68rem; color: var(--good); border: 1px solid #3d5a3b; border-radius: 3px; padding: 0 4px; font-weight: 500; }
+.num { width: 5em; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 5px; }
 .danger { background: #8c2f25; border-color: #c2493b; color: #fff4ee; }
 
 @media (max-width: 1100px) {
@@ -370,6 +380,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <button role="tab" data-action="tab" data-tab="tree" aria-selected="false">Passive tree <span id="tree-count" class="count-badge"></span></button>
       <button role="tab" data-action="tab" data-tab="maps" aria-selected="false">Maps</button>
       <button role="tab" data-action="tab" data-tab="auto" aria-selected="false">Automation</button>
+      <button role="tab" data-action="tab" data-tab="league" aria-selected="false">League</button>
       <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
       <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
     </div>
@@ -379,6 +390,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <div data-panel="tree" id="tree" role="tabpanel" hidden></div>
     <div data-panel="maps" id="maps" role="tabpanel" hidden></div>
     <div data-panel="auto" id="auto" role="tabpanel" hidden></div>
+    <div data-panel="league" id="league" role="tabpanel" hidden></div>
     <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
     <div data-panel="help" role="tabpanel" hidden>
       <div class="help">
