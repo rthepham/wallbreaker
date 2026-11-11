@@ -1,0 +1,2449 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>
+<title>Wallbreaker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral+SC:wght@500;700&display=swap">
+<style>
+/* Layout: a forge-bench dashboard. Three live columns (character, fight, diagnosis) over a workbench of tabs. */
+:root {
+  color-scheme: dark;
+  --ground: #12151b;
+  --panel: #1a1e26;
+  --panel-2: #222733;
+  --rule: #2f3544;
+  --ink: #e4ddcc;
+  --muted: #8f94a1;
+  --brass: #c9a659;
+  --brass-ink: #1b150a;
+  --good: #82c27c;
+  --neg: #e56c5e;
+  --t-physical: #cbc5b6;
+  --t-fire: #f07a40;
+  --t-cold: #70b6ea;
+  --t-lightning: #f1d24c;
+  --t-chaos: #b982e2;
+  --r-normal: #d9d5c9;
+  --r-magic: #8fa0ff;
+  --r-rare: #f0d064;
+  --r-boss: #ff9161;
+  --life: #a8352b;
+  --mana: #355ab0;
+  --xp: #8a7236;
+  --f-display: 'Spectral SC', 'Palatino Linotype', Georgia, serif;
+  --f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --radius: 4px;
+}
+html, body { background: var(--ground); color: var(--ink); }
+body {
+  font-family: var(--f-body);
+  font-size: 14px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 32px;
+}
+* { box-sizing: border-box; }
+h1, h2, h3, h4, .level, .wordmark { font-variant-numeric: lining-nums; }
+h1, h2, h3, h4 { font-family: var(--f-display); font-weight: 500; letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 0.95rem; color: var(--brass); margin: 14px 0 6px; }
+h4 { font-size: 0.95rem; margin: 12px 0 6px; color: var(--brass); }
+p { margin: 0 0 8px; }
+b { font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 0.82rem; }
+.good { color: var(--good); }
+.neg { color: var(--neg); }
+.low { color: var(--t-fire); }
+button {
+  font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule);
+  border-radius: var(--radius); padding: 6px 10px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--brass); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+button.primary { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); font-weight: 600; }
+select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); padding: 6px; min-width: 0; max-width: 100%; }
+
+.app { max-width: 1440px; margin: 0 auto; display: grid; gap: 12px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.wordmark { font-family: var(--f-display); font-weight: 700; font-size: 1.7rem; letter-spacing: 0.08em; color: var(--brass); }
+.controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.speed { display: inline-flex; }
+.speed button { border-radius: 0; margin-left: -1px; padding: 5px 10px; font-family: var(--f-mono); font-size: 0.85rem; }
+.speed button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.speed button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.speed button[aria-pressed="true"] { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.toggle input { accent-color: var(--brass); }
+
+/* Zones */
+.zones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.zone { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; background: var(--panel); }
+.zone.current { border-color: var(--brass); background: var(--panel-2); box-shadow: inset 3px 0 0 var(--brass); }
+.zone-num { font-variant-numeric: lining-nums; font-family: var(--f-display); font-size: 1.4rem; color: var(--brass); width: 1.2em; text-align: center; }
+.zone-body { display: grid; min-width: 0; }
+.zone-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zone-meta { font-size: 0.78rem; color: var(--muted); }
+.zone.locked .zone-num { color: var(--muted); }
+
+/* Board */
+.board { display: grid; grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(270px, 350px); gap: 12px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
+.panel > h2 { margin-bottom: 8px; }
+
+/* Bars */
+.bar { position: relative; height: 20px; background: #0d1015; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; margin: 4px 0; }
+.bar-fill { position: absolute; inset: 0 auto 0 0; transition: width 90ms linear; }
+.bar-label { position: relative; font-family: var(--f-mono); font-size: 0.78rem; padding: 0 6px; line-height: 18px; white-space: nowrap; }
+.bar.life .bar-fill { background: var(--life); }
+.bar.mana .bar-fill { background: var(--mana); }
+.bar.xp { height: 6px; }
+.bar.xp .bar-fill { background: var(--xp); }
+.bar.mlife { height: 14px; margin: 0; }
+.bar.mlife .bar-fill { background: #6d2a24; }
+.bar.mlife .bar-label { font-size: 0.7rem; line-height: 12px; }
+@media (prefers-reduced-motion: reduce) { .bar-fill { transition: none; } }
+
+.level-row { display: flex; justify-content: space-between; align-items: baseline; }
+.level { font-family: var(--f-display); font-size: 1.15rem; }
+.kv { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dotted #262b37; }
+.kv b { font-family: var(--f-mono); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.maxhit { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 0.88rem; }
+.maxhit div { display: flex; align-items: center; gap: 6px; }
+.maxhit b { margin-left: auto; font-family: var(--f-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.boss-ttk { margin-top: 8px; }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex: none; }
+.dot-physical { background: var(--t-physical); }
+.dot-fire { background: var(--t-fire); }
+.dot-cold { background: var(--t-cold); }
+.dot-lightning { background: var(--t-lightning); }
+.dot-chaos { background: var(--t-chaos); }
+.dt { text-transform: capitalize; }
+.dt-fire { color: var(--t-fire); } .dt-cold { color: var(--t-cold); } .dt-lightning { color: var(--t-lightning); } .dt-chaos { color: var(--t-chaos); }
+
+/* Fight */
+.run-head { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: flex-start; }
+.mix { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.chip { display: inline-flex; align-items: center; font-size: 0.78rem; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 999px; background: var(--panel-2); white-space: nowrap; gap: 2px; }
+.monsters { margin-top: 10px; min-height: 120px; display: grid; gap: 3px; align-content: start; }
+.pack-head { font-size: 0.8rem; color: var(--muted); }
+.mon { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 0.85rem; }
+.mon-name { display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mon.dead { opacity: 0.35; }
+.mon.r-magic .mon-name { color: var(--r-magic); }
+.mon.r-rare .mon-name { color: var(--r-rare); }
+.mon.r-boss .mon-name { color: var(--r-boss); font-weight: 600; }
+.mon.r-boss .bar.mlife { height: 18px; }
+.windup { grid-column: 1 / -1; color: var(--t-fire); font-size: 0.8rem; font-weight: 600; }
+.phase { padding: 30px 0; text-align: center; color: var(--muted); }
+.log { list-style: none; margin: 0; padding: 0; font-family: var(--f-mono); font-size: 0.76rem; max-height: 260px; overflow-y: auto; border-top: 1px solid var(--rule); }
+.log li { padding: 1px 0; color: var(--muted); overflow-wrap: anywhere; }
+.log .t { display: inline-block; min-width: 4.4em; color: #5c6170; }
+.log-hit { color: #a9a597 !important; }
+.log-taken.log-fire { color: var(--t-fire) !important; }
+.log-taken.log-cold { color: var(--t-cold) !important; }
+.log-taken.log-lightning { color: var(--t-lightning) !important; }
+.log-taken.log-physical { color: #d6b8a8 !important; }
+.log-death { color: var(--neg) !important; font-weight: 500; }
+.log-level, .log-clear { color: var(--good) !important; }
+.log-boss { color: var(--r-boss) !important; }
+.log-loot.log-magic { color: var(--r-magic) !important; }
+.log-loot.log-rare { color: var(--r-rare) !important; }
+.log-loot.log-currency { color: var(--brass) !important; }
+.log-warn { color: var(--neg) !important; }
+
+/* Diagnosis */
+.diag-badge { display: inline-block; font-family: var(--f-display); font-size: 1.05rem; padding: 4px 12px; border-radius: var(--radius); margin-bottom: 10px; }
+.diag-badge.ok { color: var(--good); border: 1px solid #3d5a3b; background: #18231a; }
+.diag-badge.stalled { color: #fff4ee; background: #8c2f25; border: 1px solid #c2493b; }
+.cause { border-left: 3px solid var(--rule); padding: 4px 0 4px 10px; margin-bottom: 10px; }
+.cause.primary { border-left-color: var(--neg); }
+.cause.primary p:first-child { font-size: 0.98rem; }
+.cause-state { font-family: var(--f-display); color: var(--brass); }
+.lookat { font-size: 0.85rem; }
+.lookat b { color: var(--brass); }
+.runs { list-style: none; margin: 0; padding: 0; font-size: 0.82rem; }
+.runs li { display: grid; grid-template-columns: 2.4em 4.6em 1fr auto; gap: 6px; padding: 2px 0; border-bottom: 1px dotted #262b37; }
+.zone-tag { font-family: var(--f-mono); color: var(--muted); }
+.totals { margin-top: 8px; }
+
+/* Lower panel */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin: -4px 0 12px; flex-wrap: wrap; }
+.tabs button { border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; font-family: var(--f-display); font-size: 1.02rem; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brass); }
+
+.gear-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.slot { display: grid; text-align: left; gap: 2px; padding: 8px; min-width: 0; }
+.slot-name { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.slot-item { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot.selected, .inv-row.selected { border-color: var(--brass); background: #2a2b2c; }
+.r-normal { color: var(--r-normal); }
+.r-magic { color: var(--r-magic); }
+.r-rare { color: var(--r-rare); }
+.wallet { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.88rem; }
+.coin b { font-family: var(--f-mono); color: var(--brass); }
+.conv { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.small-btn { font-size: 0.8rem; padding: 4px 8px; }
+.inv-tools { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+.filters, .bulk { display: flex; flex-wrap: wrap; gap: 4px; }
+.tab-chip { font-size: 0.8rem; padding: 3px 9px; border-radius: 999px; }
+.tab-chip.on { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.inv { display: grid; gap: 3px; max-height: 420px; overflow-y: auto; padding-right: 2px; }
+.inv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; text-align: left; padding: 6px 8px; background: var(--panel); }
+.inv-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-mods { grid-column: 1 / -1; color: var(--muted); overflow-wrap: anywhere; }
+.empty { padding: 12px 0; }
+.lock { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; }
+
+.item-card { background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); padding: 10px 12px; }
+.item-card.r-magic { border-color: #3f4a8a; }
+.item-card.r-rare { border-color: #7a6a2c; }
+.item-name { font-family: var(--f-display); font-size: 1.2rem; }
+.item-sub { color: var(--muted); font-size: 0.82rem; }
+.item-base { color: var(--ink); font-size: 0.85rem; margin: 6px 0; }
+.mods { list-style: none; margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid var(--rule); color: var(--ink); }
+.mods li { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
+.affix, .tier { font-family: var(--f-mono); font-size: 0.72rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 0 3px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.compare { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 6px 0; }
+.compare th, .compare td { text-align: right; padding: 3px 6px; border-bottom: 1px dotted #262b37; font-variant-numeric: tabular-nums; }
+.compare th:first-child, .compare td:first-child { text-align: left; }
+.compare th { color: var(--muted); font-weight: 500; }
+.cur-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.cur-btn { display: grid; grid-template-columns: 1fr auto; text-align: left; gap: 0 6px; }
+.cur-btn .count { font-family: var(--f-mono); color: var(--brass); }
+.cur-eff { grid-column: 1 / -1; font-size: 0.74rem; color: var(--muted); }
+.smith { margin-top: 12px; display: grid; gap: 6px; }
+.smith-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.smith-row select { flex: 1 1 200px; }
+.toast { padding: 6px 10px; border-radius: var(--radius); background: var(--panel-2); border: 1px solid var(--rule); margin-bottom: 10px; }
+.toast.good { border-color: #3d5a3b; color: var(--good); }
+.toast.neg { border-color: #7c3a32; color: #f0a59b; }
+
+.sheet-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.formula { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.formula td { padding: 3px 6px; border-bottom: 1px dotted #262b37; }
+.formula td:last-child { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.formula tr.total td { color: var(--brass); font-weight: 600; border-bottom-color: var(--brass); }
+details { border-bottom: 1px dotted #262b37; }
+summary { display: flex; justify-content: space-between; padding: 4px 0; cursor: pointer; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: '▸'; color: var(--muted); margin-right: 6px; }
+details[open] summary::before { content: '▾'; }
+summary span { flex: 1; }
+summary b { font-family: var(--f-mono); font-weight: 500; }
+.sources { list-style: none; margin: 0 0 6px; padding: 0 0 0 18px; font-size: 0.82rem; color: var(--muted); }
+.sources li { display: flex; justify-content: space-between; gap: 8px; }
+.sources b { font-family: var(--f-mono); font-weight: 500; color: var(--ink); }
+.rules { padding-left: 18px; color: var(--muted); }
+.help { max-width: 70ch; }
+.help li { margin-bottom: 4px; }
+.reset-box { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--rule); display: grid; gap: 8px; justify-items: start; }
+.reset-confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.danger { background: #8c2f25; border-color: #c2493b; color: #fff4ee; }
+
+@media (max-width: 1100px) {
+  .board { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+  .board .diag { grid-column: 1 / -1; }
+  .zones { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+}
+@media (max-width: 760px) {
+  .board, .gear-grid, .sheet-grid { grid-template-columns: minmax(0, 1fr); }
+  .board .fight { order: -2; }
+  .board .diag { order: -1; }
+  .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .zone { padding: 6px 8px; }
+  .slots { grid-template-columns: minmax(0, 1fr); }
+  .wordmark { font-size: 1.4rem; }
+  .log { max-height: 180px; }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–5</span></div>
+    <div class="controls">
+      <div class="speed" role="group" aria-label="Game speed">
+        <button data-action="speed" data-speed="0" aria-pressed="false">Pause</button>
+        <button data-action="speed" data-speed="1" aria-pressed="true">1×</button>
+        <button data-action="speed" data-speed="3" aria-pressed="false">3×</button>
+        <button data-action="speed" data-speed="10" aria-pressed="false">10×</button>
+      </div>
+      <label class="toggle" title="After each run, go to the newest unlocked zone"><input type="checkbox" id="auto-advance" checked> Push to newest zone</label>
+      <span id="save-status" class="muted small" aria-live="polite"></span>
+    </div>
+  </header>
+
+  <nav id="zones" class="zones" aria-label="Zones"></nav>
+
+  <main class="board">
+    <section class="panel char" aria-label="Character"><h2>Character</h2><div id="vitals"></div></section>
+    <section class="panel fight" aria-label="Current run"><div id="run"></div><h3>Combat log</h3><ol id="log" class="log"></ol></section>
+    <section class="panel diag" aria-label="Diagnosis"><h2>Diagnosis</h2><div id="diagnosis"></div></section>
+  </main>
+
+  <section class="panel lower">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-action="tab" data-tab="gear" aria-selected="true">Gear &amp; crafting</button>
+      <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
+      <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
+    </div>
+    <div data-panel="gear" id="gear" role="tabpanel"></div>
+    <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
+    <div data-panel="help" role="tabpanel" hidden>
+      <div class="help">
+        <p>Your character fights on its own. You make it stronger by choosing and crafting its gear. Progress will stop at certain zones; the <b>Diagnosis</b> panel tells you why, and your job is to fix the build.</p>
+        <h3>The loop</h3>
+        <ul>
+          <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
+          <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
+          <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>
+        </ul>
+        <h3>Crafting</h3>
+        <ul>
+          <li><b>Kindling</b> makes a Normal item Magic (1–2 mods). <b>Tempest</b> rerolls a Magic item's mods.</li>
+          <li><b>Forge</b> makes a Normal item Rare (3–6 mods). <b>Wildfire</b> rerolls a Rare. <b>Crown</b> adds a mod to a Rare. <b>Ash</b> wipes any item back to Normal.</li>
+          <li><b>Salvage</b> unwanted items for Scrap. <b>The Smith</b> spends Scrap to add one mod of your choice, so bad luck never blocks you forever.</li>
+          <li>Item level decides which mod tiers (T1, T2…) can roll. Higher zones drop higher item levels.</li>
+        </ul>
+        <h3>Prototype check</h3>
+        <p>Play for about 20 minutes. Zone 4 (Emberwatch) is full of fire casters. The question: is hitting that wall, understanding it, crafting through it and pushing on satisfying?</p>
+        <p class="muted small">Your game saves in this browser every 30 seconds and when you leave the page.</p>
+        <div class="reset-box">
+          <button data-action="reset-ask">Start a new character</button>
+          <div id="reset-confirm" class="reset-confirm" hidden>
+            <span>This deletes your current character and items.</span>
+            <button class="danger" data-action="reset-confirm">Delete and start over</button>
+            <button data-action="reset-cancel">Keep playing</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<script>(() => {
+  // src/data/player.js
+  var PLAYER = {
+    life: { base: 50, perLevel: 12 },
+    mana: { base: 40, perLevel: 6 },
+    // DOC: doc says 2% of max mana per second. At that rate the starting skill
+    // runs dry in a few seconds, so mana would be the first wall instead of fire.
+    manaRegenPctPerSec: 0.12,
+    // DOC: doc has 0 base life regen. With none, damage only ever piles up across
+    // a 10-pack zone, so every zone eventually kills you. A small base regen keeps
+    // walls about specific threats.
+    lifeRegenPctPerSec: 0.015,
+    // Extra recovery while walking between packs (not in the doc). Makes each
+    // pack a fair test on its own instead of slow attrition across a zone.
+    outOfCombatRegenPctPerSec: 0.25,
+    baseCritMulti: 1.5,
+    maxRes: 75,
+    armourCap: 0.9,
+    evasionCap: 0.75,
+    levelCap: 90,
+    xp: { base: 100, growth: 1.15 },
+    xpGraceLevels: 5,
+    xpPenaltyPerLevel: 0.1,
+    deathXpLossPct: 0.1,
+    respawnSeconds: 5,
+    // Used when no weapon is equipped.
+    unarmed: { damage: [2, 5], aps: 1.2, crit: 5 }
+  };
+  var RULES = {
+    ticksPerSecond: 10,
+    // Seconds of walking between packs. Regen still applies.
+    travelSeconds: 1.5,
+    // Pause after a run ends before the next one starts.
+    runEndSeconds: 2,
+    inventorySize: 60,
+    combatLogSize: 150,
+    runHistorySize: 30
+  };
+
+  // src/data/monsters.js
+  var MONSTERS = {
+    lifeBase: 15,
+    lifeGrowth: 1.11,
+    hitBase: 5,
+    hitGrowth: 1.075,
+    // Global knob for monster damage. 1.0 = doc values. Lowered because every
+    // monster in a pack attacks at once, which the doc's per-hit numbers didn't account for.
+    damageScale: 0.4,
+    // Hits roll between (1 - variance) and (1 + variance) of their base.
+    hitVariance: 0.2,
+    xpBase: 2,
+    xpGrowth: 1.13,
+    packSize: [5, 8],
+    rarity: {
+      normal: { lifeMult: 1, damageMult: 1, xpMult: 1, dropMult: 1 },
+      magic: { chance: 0.12, lifeMult: 2, damageMult: 1.1, xpMult: 2, dropMult: 1.5 },
+      // At most one rare per pack.
+      rare: { chance: 0.05, lifeMult: 4, damageMult: 1.2, xpMult: 5, dropMult: 3 }
+    },
+    rareMods: [
+      { id: "hulking", name: "Hulking", lifeMult: 1.5 },
+      { id: "savage", name: "Savage", damageMult: 1.4 },
+      { id: "swift", name: "Swift", speedMult: 1.3 }
+    ]
+  };
+  var THREATS = {
+    swarm: {
+      name: "Swarm",
+      damageType: "physical",
+      // DOC: doc says 0.5x. With 15 attackers that out-damages every other
+      // threat; Swarms are meant to test clear speed, not defences.
+      interval: 1.8,
+      hitMult: 0.35,
+      lifeMult: 0.3,
+      packSize: [15, 15],
+      xpMult: 0.4,
+      dropMult: 0.35,
+      names: ["Gnawling", "Mire Rat", "Ash Mite", "Scuttler"]
+    },
+    brute: {
+      name: "Brute",
+      damageType: "physical",
+      interval: 2,
+      hitMult: 2.5,
+      lifeMult: 1.2,
+      xpMult: 1.4,
+      dropMult: 1.2,
+      names: ["Quarry Ogre", "Slagback", "Hollow Brute", "Stonejaw"]
+    },
+    caster: {
+      name: "Caster",
+      // Element is chosen by the zone's threat mix.
+      damageType: "fire",
+      interval: 1,
+      hitMult: 1.2,
+      lifeMult: 0.8,
+      xpMult: 1.1,
+      dropMult: 1,
+      names: {
+        fire: ["Cinder Acolyte", "Pyre Mage", "Ember Witch"],
+        cold: ["Rime Acolyte", "Frost Mage"],
+        lightning: ["Storm Acolyte", "Spark Mage"]
+      }
+    },
+    boss: {
+      name: "Boss",
+      interval: 1.5,
+      hitMult: 1,
+      lifeMult: 20,
+      xpMult: 12,
+      dropMult: 0,
+      // bosses use guaranteed drops instead
+      bigHit: { mult: 4, interval: 6, windup: 1 }
+    }
+  };
+
+  // src/data/zones.js
+  var ZONES = [
+    {
+      id: 1,
+      name: "The Sunken Yard",
+      level: 1,
+      packs: 10,
+      mix: [{ threat: "swarm", weight: 1 }],
+      boss: { name: "Yard Matron", damageType: "physical" },
+      targetPackSeconds: 6
+    },
+    {
+      id: 2,
+      name: "Mirefield",
+      level: 4,
+      packs: 10,
+      mix: [{ threat: "swarm", weight: 1 }],
+      boss: { name: "The Bloated Reeve", damageType: "physical" },
+      targetPackSeconds: 6
+    },
+    {
+      id: 3,
+      name: "Broken Quarry",
+      level: 8,
+      packs: 10,
+      mix: [
+        { threat: "swarm", weight: 2 },
+        { threat: "brute", weight: 3 }
+      ],
+      boss: { name: "Foreman Gath", damageType: "physical" },
+      targetPackSeconds: 6
+    },
+    {
+      id: 4,
+      name: "Emberwatch",
+      level: 13,
+      packs: 10,
+      mix: [
+        { threat: "swarm", weight: 1 },
+        { threat: "brute", weight: 0.5 },
+        { threat: "caster", element: "fire", weight: 3 }
+      ],
+      boss: { name: "The Pyre Warden", damageType: "fire" },
+      targetPackSeconds: 6
+    },
+    {
+      id: 5,
+      name: "The Ashen Steps",
+      level: 18,
+      packs: 10,
+      mix: [
+        { threat: "swarm", weight: 1 },
+        { threat: "brute", weight: 1.5 },
+        { threat: "caster", element: "fire", weight: 2 }
+      ],
+      boss: { name: "Ashborn Colossus", damageType: "physical" },
+      targetPackSeconds: 6
+    }
+  ];
+  function zoneResPenalty(zoneId) {
+    if (zoneId >= 6) return 20;
+    return 0;
+  }
+
+  // src/data/items.js
+  var SLOTS = ["weapon", "body", "ring"];
+  var SLOT_NAMES = { weapon: "Weapon", body: "Body Armour", ring: "Ring" };
+  var BASES = {
+    // Weapons: damage range, attacks per second, base crit chance %.
+    rusted_blade: { slot: "weapon", name: "Rusted Blade", ilvl: 1, damage: [3, 7], aps: 1.3, crit: 5 },
+    hatchet: { slot: "weapon", name: "Hatchet", ilvl: 1, damage: [4, 9], aps: 1.15, crit: 5 },
+    iron_cleaver: { slot: "weapon", name: "Iron Cleaver", ilvl: 6, damage: [6, 13], aps: 1.2, crit: 5 },
+    bearded_axe: { slot: "weapon", name: "Bearded Axe", ilvl: 11, damage: [10, 21], aps: 1.1, crit: 5 },
+    duelist_sabre: { slot: "weapon", name: "Duelist Sabre", ilvl: 11, damage: [8, 15], aps: 1.45, crit: 6 },
+    war_cleaver: { slot: "weapon", name: "War Cleaver", ilvl: 16, damage: [15, 30], aps: 1.15, crit: 5 },
+    headsman_blade: { slot: "weapon", name: "Headsman's Blade", ilvl: 21, damage: [20, 40], aps: 1.1, crit: 6 },
+    needle_rapier: { slot: "weapon", name: "Needle Rapier", ilvl: 21, damage: [14, 26], aps: 1.55, crit: 7 },
+    // Body armour: implicit defences.
+    leather_vest: { slot: "body", name: "Leather Vest", ilvl: 1, implicits: [{ stat: "evasion", kind: "flat", value: 20 }] },
+    iron_plate: { slot: "body", name: "Iron Plate", ilvl: 1, implicits: [{ stat: "armour", kind: "flat", value: 20 }] },
+    studded_jerkin: { slot: "body", name: "Studded Jerkin", ilvl: 9, implicits: [{ stat: "evasion", kind: "flat", value: 60 }] },
+    scale_mail: { slot: "body", name: "Scale Mail", ilvl: 9, implicits: [{ stat: "armour", kind: "flat", value: 60 }] },
+    hide_coat: { slot: "body", name: "Hide Coat", ilvl: 18, implicits: [{ stat: "evasion", kind: "flat", value: 120 }] },
+    plate_hauberk: { slot: "body", name: "Plate Hauberk", ilvl: 18, implicits: [{ stat: "armour", kind: "flat", value: 120 }] },
+    // Rings
+    iron_band: { slot: "ring", name: "Iron Band", ilvl: 1, implicits: [{ stat: "life", kind: "flat", value: 10 }] },
+    ruby_band: { slot: "ring", name: "Ruby Band", ilvl: 1, implicits: [{ stat: "fireRes", kind: "flat", value: 8 }] },
+    steel_band: { slot: "ring", name: "Steel Band", ilvl: 1, implicits: [{ stat: "armour", kind: "flat", value: 25 }] }
+  };
+  var T = [1, 10, 20, 30, 40, 55, 70, 80];
+  function tiers(ranges, levels = T) {
+    return ranges.map(([min, max], i) => ({ ilvl: levels[i], min, max }));
+  }
+  var MODS = {
+    life: {
+      name: "Maximum Life",
+      type: "prefix",
+      slots: ["body", "ring"],
+      stat: "life",
+      kind: "flat",
+      text: "+{v} to maximum Life",
+      weight: 100,
+      tiers: tiers([[10, 19], [20, 34], [35, 49], [50, 69], [70, 89], [90, 109], [110, 124], [120, 139]])
+    },
+    armour: {
+      name: "Armour",
+      type: "prefix",
+      slots: ["body"],
+      stat: "armour",
+      kind: "flat",
+      text: "+{v} to Armour",
+      weight: 100,
+      tiers: tiers([[10, 20], [25, 45], [50, 75], [80, 120], [130, 180], [190, 240], [250, 300], [300, 400]])
+    },
+    evasion: {
+      name: "Evasion",
+      type: "prefix",
+      slots: ["body"],
+      stat: "evasion",
+      kind: "flat",
+      text: "+{v} to Evasion",
+      weight: 100,
+      tiers: tiers([[10, 20], [25, 45], [50, 75], [80, 120], [130, 180], [190, 240], [250, 300], [300, 400]])
+    },
+    ring_armour: {
+      name: "Armour",
+      type: "prefix",
+      slots: ["ring"],
+      stat: "armour",
+      kind: "flat",
+      text: "+{v} to Armour",
+      weight: 60,
+      tiers: tiers([[5, 10], [12, 22], [25, 38], [40, 60], [65, 90], [95, 120], [125, 150], [150, 200]])
+    },
+    mana: {
+      name: "Maximum Mana",
+      type: "prefix",
+      slots: ["ring"],
+      stat: "mana",
+      kind: "flat",
+      text: "+{v} to maximum Mana",
+      weight: 80,
+      tiers: tiers([[10, 19], [20, 29], [30, 39], [40, 54], [55, 69], [70, 84], [85, 99], [100, 120]])
+    },
+    phys_inc: {
+      name: "Increased Physical Damage",
+      type: "prefix",
+      slots: ["weapon"],
+      stat: "physical",
+      kind: "increased",
+      text: "{v}% increased Physical Damage",
+      weight: 100,
+      tiers: tiers([[15, 24], [25, 39], [40, 59], [60, 79], [80, 99], [100, 119], [120, 149], [150, 169]])
+    },
+    added_phys: {
+      name: "Added Physical Damage",
+      type: "prefix",
+      slots: ["weapon"],
+      stat: "addedPhys",
+      kind: "flat",
+      text: "Adds {v} to {v2} Physical Damage",
+      double: true,
+      weight: 100,
+      tiers: tiers([[1, 2], [2, 4], [4, 6], [6, 9], [9, 12], [12, 15], [15, 19], [19, 24]])
+    },
+    ring_added_phys: {
+      name: "Added Physical Damage",
+      type: "prefix",
+      slots: ["ring"],
+      stat: "addedPhys",
+      kind: "flat",
+      text: "Adds {v} to {v2} Physical Damage to Attacks",
+      double: true,
+      weight: 60,
+      tiers: tiers([[1, 1], [1, 2], [2, 3], [3, 5], [5, 7], [7, 9], [9, 11], [11, 14]])
+    },
+    fire_res: {
+      name: "Fire Resistance",
+      type: "suffix",
+      slots: ["body", "ring"],
+      stat: "fireRes",
+      kind: "flat",
+      text: "+{v}% to Fire Resistance",
+      weight: 100,
+      tiers: tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]])
+    },
+    cold_res: {
+      name: "Cold Resistance",
+      type: "suffix",
+      slots: ["body", "ring"],
+      stat: "coldRes",
+      kind: "flat",
+      text: "+{v}% to Cold Resistance",
+      weight: 100,
+      tiers: tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]])
+    },
+    lightning_res: {
+      name: "Lightning Resistance",
+      type: "suffix",
+      slots: ["body", "ring"],
+      stat: "lightningRes",
+      kind: "flat",
+      text: "+{v}% to Lightning Resistance",
+      weight: 100,
+      tiers: tiers([[6, 11], [12, 17], [18, 23], [24, 29], [30, 35], [36, 38], [39, 41], [42, 45]])
+    },
+    chaos_res: {
+      name: "Chaos Resistance",
+      type: "suffix",
+      slots: ["body", "ring"],
+      stat: "chaosRes",
+      kind: "flat",
+      text: "+{v}% to Chaos Resistance",
+      weight: 50,
+      // Starts at tier 4 (item level 40).
+      tiers: tiers([[11, 15], [16, 20], [21, 25], [26, 30]], [40, 55, 70, 80]).map((t, i) => ({ ...t, tier: i + 4 }))
+    },
+    life_regen: {
+      name: "Life Regeneration",
+      type: "suffix",
+      slots: ["body", "ring"],
+      stat: "lifeRegen",
+      kind: "flat",
+      text: "Regenerate {v} Life per second",
+      weight: 70,
+      tiers: tiers([[1, 2], [3, 4], [5, 7], [8, 11], [12, 16], [17, 22], [23, 29], [30, 38]])
+    },
+    mana_regen: {
+      name: "Mana Regeneration",
+      type: "suffix",
+      slots: ["ring"],
+      stat: "manaRegen",
+      kind: "increased",
+      text: "{v}% increased Mana Regeneration Rate",
+      weight: 70,
+      tiers: tiers([[10, 19], [20, 29], [30, 39], [40, 49], [50, 59], [60, 69], [70, 79], [80, 89]])
+    },
+    attack_speed: {
+      name: "Attack Speed",
+      type: "suffix",
+      slots: ["weapon"],
+      stat: "attackSpeed",
+      kind: "increased",
+      text: "{v}% increased Attack Speed",
+      weight: 80,
+      tiers: tiers([[5, 7], [8, 10], [11, 13], [14, 16], [17, 19], [20, 22], [23, 25], [26, 27]])
+    },
+    crit_chance: {
+      name: "Critical Strike Chance",
+      type: "suffix",
+      slots: ["weapon"],
+      stat: "critChance",
+      kind: "increased",
+      text: "{v}% increased Critical Strike Chance",
+      weight: 80,
+      tiers: tiers([[10, 14], [15, 19], [20, 24], [25, 29], [30, 34], [35, 37], [38, 40], [41, 45]])
+    },
+    crit_multi: {
+      name: "Critical Strike Multiplier",
+      type: "suffix",
+      slots: ["weapon"],
+      stat: "critMulti",
+      kind: "flat",
+      text: "+{v}% to Critical Strike Multiplier",
+      weight: 80,
+      tiers: tiers([[8, 12], [13, 16], [17, 19], [20, 24], [25, 28], [29, 31], [32, 34], [35, 38]])
+    },
+    targets: {
+      name: "Additional Targets",
+      type: "suffix",
+      slots: ["weapon"],
+      stat: "targets",
+      kind: "flat",
+      text: "Skills hit +{v} additional targets",
+      weight: 40,
+      tiers: [{ ilvl: 40, min: 1, max: 1, tier: 4 }, { ilvl: 80, min: 2, max: 2, tier: 8 }]
+    }
+  };
+  for (const fam of Object.values(MODS)) {
+    fam.tiers.forEach((t, i) => {
+      if (t.tier == null) t.tier = i + 1;
+    });
+  }
+  var RARE_NAME_PARTS = {
+    first: ["Grim", "Ash", "Storm", "Bone", "Dusk", "Iron", "Ember", "Gloom", "Rune", "Thorn", "Blood", "Cinder", "Hollow", "Wraith"],
+    second: {
+      weapon: ["Bite", "Edge", "Song", "Hunger", "Fang", "Cleaver", "Mangler"],
+      body: ["Shell", "Ward", "Hide", "Carapace", "Bastion", "Coat"],
+      ring: ["Loop", "Coil", "Circle", "Band", "Knot", "Spiral"]
+    }
+  };
+
+  // src/data/currency.js
+  var CURRENCY = {
+    kindling: { name: "Kindling", effect: "Normal \u2192 Magic", weight: 40 },
+    tempest: { name: "Tempest", effect: "Reroll a Magic item's mods", weight: 25 },
+    forge: { name: "Forge", effect: "Normal \u2192 Rare", weight: 12 },
+    ash: { name: "Ash", effect: "Reset any item to Normal", weight: 10 },
+    wildfire: { name: "Wildfire", effect: "Reroll all mods on a Rare", weight: 8 },
+    crown: { name: "Crown", effect: "Add one random mod to a Rare", weight: 1 }
+  };
+  var CURRENCY_ORDER = ["kindling", "tempest", "forge", "ash", "wildfire", "crown"];
+  var CONVERSIONS = [
+    { from: "kindling", amount: 5, to: "tempest" },
+    { from: "tempest", amount: 4, to: "forge" },
+    { from: "wildfire", amount: 6, to: "crown" }
+  ];
+  var DROPS = {
+    itemChance: 0.08,
+    rarityWeights: { normal: 70, magic: 25, rare: 5 },
+    currencyChance: 0.03,
+    bossItems: 3,
+    bossCurrency: 2
+  };
+  var SCRAP = {
+    salvage: { normal: 1, magic: 2, rare: 5 },
+    // Smith cost = base + perTier * tier
+    smithBase: 6,
+    smithPerTier: 6,
+    // Smith crafts at the best tier the item level allows, capped here.
+    smithMaxTier: 3
+  };
+
+  // src/rng.js
+  function createRng(seed) {
+    let s = seed >>> 0;
+    const next = () => {
+      s = s + 1831565813 >>> 0;
+      let t = s;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+    const rng2 = {
+      next,
+      getState: () => s,
+      setState: (v) => {
+        s = v >>> 0;
+      },
+      // Integer in [min, max] inclusive.
+      int: (min, max) => min + Math.floor(next() * (max - min + 1)),
+      range: (min, max) => min + next() * (max - min),
+      chance: (p) => next() < p,
+      pick: (arr) => arr[Math.floor(next() * arr.length)],
+      // entries: [{ weight, ... }] or [[value, weight]]; returns the entry.
+      weighted(entries, getWeight = (e) => e.weight) {
+        let total = 0;
+        for (const e of entries) total += getWeight(e);
+        if (total <= 0) return null;
+        let r = next() * total;
+        for (const e of entries) {
+          r -= getWeight(e);
+          if (r < 0) return e;
+        }
+        return entries[entries.length - 1];
+      }
+    };
+    return rng2;
+  }
+
+  // src/data/skills.js
+  var SKILLS = {
+    cleave: {
+      name: "Cleave",
+      kind: "attack",
+      damageType: "physical",
+      // "Weapon damage x 1.2"
+      damageMore: 1.2,
+      // DOC: doc says 6. Lowered with the mana regen change so base Cleave never starves.
+      manaCost: 4,
+      targets: 3,
+      tags: ["Melee", "Area"]
+    }
+  };
+
+  // src/stats.js
+  var DAMAGE_TYPES = ["physical", "fire", "cold", "lightning", "chaos"];
+  function itemLabel(item) {
+    return item.name || BASES[item.baseId].name;
+  }
+  function collectModifiers(character) {
+    const mods = [];
+    const L = character.level;
+    mods.push({ stat: "life", kind: "flat", value: PLAYER.life.base + PLAYER.life.perLevel * L, source: `Level ${L}` });
+    mods.push({ stat: "mana", kind: "flat", value: PLAYER.mana.base + PLAYER.mana.perLevel * L, source: `Level ${L}` });
+    for (const [slot, item] of Object.entries(character.equipment)) {
+      if (!item) continue;
+      const base = BASES[item.baseId];
+      const where = `${SLOT_NAMES[slot]}: ${itemLabel(item)}`;
+      for (const imp of base.implicits || []) {
+        mods.push({ stat: imp.stat, kind: imp.kind, value: imp.value, source: `${where} (implicit)` });
+      }
+      for (const m of item.mods) {
+        const fam = MODS[m.family];
+        mods.push({ stat: fam.stat, kind: fam.kind, value: m.value, source: where });
+      }
+    }
+    return mods;
+  }
+  function group(mods) {
+    const g = {};
+    for (const m of mods) {
+      const key = `${m.stat}:${m.kind}`;
+      (g[key] || (g[key] = [])).push(m);
+    }
+    const flat = (stat) => (g[`${stat}:flat`] || []).reduce((a, m) => a + m.value, 0);
+    const inc = (stat) => (g[`${stat}:increased`] || []).reduce((a, m) => a + m.value, 0);
+    const more = (stat) => (g[`${stat}:more`] || []).reduce((a, m) => a * (1 + m.value / 100), 1);
+    const sources = (stat) => mods.filter((m) => m.stat === stat);
+    return { flat, inc, more, sources };
+  }
+  function armourReduction(armour, hit) {
+    if (armour <= 0 || hit <= 0) return 0;
+    return Math.min(PLAYER.armourCap, armour / (armour + 5 * hit));
+  }
+  function evadeChance(evasion, monsterLevel) {
+    if (evasion <= 0) return 0;
+    return Math.min(PLAYER.evasionCap, evasion / (evasion + 100 + 10 * monsterLevel));
+  }
+  function effectiveRes(stats, type, zoneId) {
+    if (type === "physical") return 0;
+    const raw = stats.res[type];
+    const penalty = type === "chaos" ? 0 : zoneResPenalty(zoneId);
+    return Math.min(raw - penalty, stats.maxRes[type]);
+  }
+  function maxHitTaken(stats, zoneId) {
+    const L = stats.life;
+    const out = {};
+    const A = stats.armour;
+    let H = (5 * L + Math.sqrt(25 * L * L + 20 * L * A)) / 10;
+    if (A / (A + 5 * H) > PLAYER.armourCap) H = L / (1 - PLAYER.armourCap);
+    out.physical = H;
+    for (const t of ["fire", "cold", "lightning", "chaos"]) {
+      out[t] = L / (1 - effectiveRes(stats, t, zoneId) / 100);
+    }
+    return out;
+  }
+  function computeStats(character) {
+    const mods = collectModifiers(character);
+    const { flat, inc, more, sources } = group(mods);
+    const skill = SKILLS[character.skillId || "cleave"];
+    const life = Math.round(flat("life") * (1 + inc("life") / 100) * more("life"));
+    const mana = Math.round(flat("mana") * (1 + inc("mana") / 100) * more("mana"));
+    const manaRegen = mana * PLAYER.manaRegenPctPerSec * (1 + inc("manaRegen") / 100);
+    const lifeRegen = flat("lifeRegen") + life * PLAYER.lifeRegenPctPerSec;
+    const armour = Math.round(flat("armour") * (1 + inc("armour") / 100));
+    const evasion = Math.round(flat("evasion") * (1 + inc("evasion") / 100));
+    const res = {
+      fire: flat("fireRes"),
+      cold: flat("coldRes"),
+      lightning: flat("lightningRes"),
+      chaos: flat("chaosRes")
+    };
+    const maxRes = {
+      fire: PLAYER.maxRes + flat("maxFireRes"),
+      cold: PLAYER.maxRes + flat("maxColdRes"),
+      lightning: PLAYER.maxRes + flat("maxLightningRes"),
+      chaos: PLAYER.maxRes + flat("maxChaosRes")
+    };
+    const weapon = character.equipment.weapon;
+    const wb = weapon ? BASES[weapon.baseId] : PLAYER.unarmed;
+    const added = flat("addedPhys");
+    const baseMin = wb.damage[0] + added;
+    const baseMax = wb.damage[1] + added * 2;
+    const increased = inc("physical") + inc("damage");
+    const moreMult = skill.damageMore * more("physical") * more("damage");
+    const hitMin = baseMin * (1 + increased / 100) * moreMult;
+    const hitMax = baseMax * (1 + increased / 100) * moreMult;
+    const aps = wb.aps * (1 + inc("attackSpeed") / 100);
+    const critChance = Math.min(100, (wb.crit + flat("critChance")) * (1 + inc("critChance") / 100));
+    const critMulti = PLAYER.baseCritMulti + flat("critMulti") / 100;
+    const critFactor = 1 + critChance / 100 * (critMulti - 1);
+    const avgHit = (hitMin + hitMax) / 2;
+    const dps = avgHit * aps * critFactor;
+    const targets = skill.targets + flat("targets");
+    const manaCost = skill.manaCost;
+    return {
+      level: character.level,
+      life,
+      mana,
+      lifeRegen,
+      manaRegen,
+      armour,
+      evasion,
+      res,
+      maxRes,
+      skill: { name: skill.name, damageType: skill.damageType, tags: skill.tags },
+      damage: {
+        baseMin,
+        baseMax,
+        added,
+        increased,
+        moreMult,
+        hitMin,
+        hitMax,
+        avgHit,
+        weaponAps: wb.aps,
+        aps,
+        critChance,
+        critMulti,
+        critFactor,
+        dps,
+        targets,
+        manaCost,
+        manaPerSecond: manaCost * aps
+      },
+      sources: {
+        life: sources("life"),
+        mana: sources("mana"),
+        armour: sources("armour"),
+        evasion: sources("evasion"),
+        fireRes: sources("fireRes"),
+        coldRes: sources("coldRes"),
+        lightningRes: sources("lightningRes"),
+        chaosRes: sources("chaosRes"),
+        lifeRegen: sources("lifeRegen"),
+        manaRegen: sources("manaRegen"),
+        physical: sources("physical"),
+        addedPhys: sources("addedPhys"),
+        attackSpeed: sources("attackSpeed"),
+        critChance: sources("critChance"),
+        critMulti: sources("critMulti"),
+        targets: sources("targets")
+      }
+    };
+  }
+
+  // src/combat.js
+  function monsterBaseLife(level) {
+    return MONSTERS.lifeBase * MONSTERS.lifeGrowth ** level;
+  }
+  function monsterBaseHit(level) {
+    return MONSTERS.hitBase * MONSTERS.hitGrowth ** level * MONSTERS.damageScale;
+  }
+  function makeMonster(rng2, id, { zone, threatId, element, rarity = "normal", isBoss = false }) {
+    const T2 = THREATS[threatId];
+    const R = MONSTERS.rarity[rarity];
+    const level = zone.level;
+    let lifeMult = T2.lifeMult * R.lifeMult;
+    let damageMult = T2.hitMult * R.damageMult;
+    let speedMult = 1;
+    let mod = null;
+    if (rarity === "rare") {
+      mod = rng2.pick(MONSTERS.rareMods);
+      lifeMult *= mod.lifeMult || 1;
+      damageMult *= mod.damageMult || 1;
+      speedMult *= mod.speedMult || 1;
+    }
+    let name;
+    let damageType;
+    if (isBoss) {
+      name = zone.boss.name;
+      damageType = zone.boss.damageType;
+    } else if (threatId === "caster") {
+      damageType = element || T2.damageType;
+      name = rng2.pick(T2.names[damageType]);
+    } else {
+      damageType = T2.damageType;
+      name = rng2.pick(T2.names);
+    }
+    if (mod) name = `${mod.name} ${name}`;
+    const maxLife = Math.round(monsterBaseLife(level) * lifeMult);
+    const interval = T2.interval / speedMult;
+    const m = {
+      id,
+      name,
+      threat: threatId,
+      rarity: isBoss ? "boss" : rarity,
+      level,
+      maxLife,
+      life: maxLife,
+      hit: monsterBaseHit(level) * damageMult,
+      damageType,
+      interval,
+      // Stagger first attacks so a pack doesn't hit in perfect sync.
+      attackTimer: interval * (0.5 + rng2.next() * 0.5),
+      isBoss,
+      xpMult: T2.xpMult * (isBoss ? 1 : R.xpMult),
+      dropMult: (T2.dropMult ?? 1) * R.dropMult
+    };
+    if (isBoss) {
+      m.bigHit = { ...T2.bigHit, timer: T2.bigHit.interval, warned: false };
+    }
+    return m;
+  }
+  function makePack(rng2, zone, nextId) {
+    const entry = rng2.weighted(zone.mix);
+    const T2 = THREATS[entry.threat];
+    const [lo, hi] = T2.packSize || MONSTERS.packSize;
+    const size = rng2.int(lo, hi);
+    const monsters = [];
+    let hasRare = false;
+    for (let i = 0; i < size; i++) {
+      let rarity = "normal";
+      if (!hasRare && rng2.chance(MONSTERS.rarity.rare.chance)) {
+        rarity = "rare";
+        hasRare = true;
+      } else if (rng2.chance(MONSTERS.rarity.magic.chance)) {
+        rarity = "magic";
+      }
+      monsters.push(makeMonster(rng2, nextId(), { zone, threatId: entry.threat, element: entry.element, rarity }));
+    }
+    return { threat: entry.threat, element: entry.element, monsters };
+  }
+  function makeBossPack(rng2, zone, nextId) {
+    return {
+      threat: "boss",
+      monsters: [makeMonster(rng2, nextId(), { zone, threatId: "boss", isBoss: true })]
+    };
+  }
+
+  // src/loot.js
+  var AFFIX_LIMITS = {
+    normal: { prefix: 0, suffix: 0 },
+    magic: { prefix: 1, suffix: 1 },
+    rare: { prefix: 3, suffix: 3 }
+  };
+  function tiersAt(familyId, ilvl) {
+    return MODS[familyId].tiers.filter((t) => t.ilvl <= ilvl);
+  }
+  function countAffixes(item) {
+    const c = { prefix: 0, suffix: 0 };
+    for (const m of item.mods) c[MODS[m.family].type]++;
+    return c;
+  }
+  function openAffixTypes(item) {
+    const lim = AFFIX_LIMITS[item.rarity];
+    const c = countAffixes(item);
+    return ["prefix", "suffix"].filter((t) => c[t] < lim[t]);
+  }
+  function eligibleFamilies(item, types = openAffixTypes(item)) {
+    const slot = BASES[item.baseId].slot;
+    const have = new Set(item.mods.map((m) => m.family));
+    return Object.keys(MODS).filter((id) => {
+      const fam = MODS[id];
+      return types.includes(fam.type) && fam.slots.includes(slot) && !have.has(id) && // A family's stat can only appear once (e.g. weapon and ring added phys are different families
+      // but never share a slot, so this only blocks true duplicates).
+      tiersAt(id, item.ilvl).length > 0;
+    });
+  }
+  function rollModValue(rng2, familyId, tier) {
+    const t = MODS[familyId].tiers.find((x) => x.tier === tier);
+    return rng2.int(t.min, t.max);
+  }
+  function rollMod(rng2, familyId, ilvl) {
+    const t = rng2.pick(tiersAt(familyId, ilvl));
+    return { family: familyId, tier: t.tier, value: rng2.int(t.min, t.max) };
+  }
+  function addRandomMod(rng2, item) {
+    const fams = eligibleFamilies(item);
+    if (!fams.length) return false;
+    const famId = rng2.weighted(fams, (id) => MODS[id].weight);
+    item.mods.push(rollMod(rng2, famId, item.ilvl));
+    sortMods(item);
+    return true;
+  }
+  function sortMods(item) {
+    item.mods.sort((a, b) => MODS[a.family].type === MODS[b.family].type ? 0 : MODS[a.family].type === "prefix" ? -1 : 1);
+  }
+  function rollModCount(rng2, rarity) {
+    if (rarity === "magic") return rng2.int(1, 2);
+    if (rarity === "rare") return rng2.weighted([[3, 3], [4, 4], [5, 2], [6, 1]], (e) => e[1])[0];
+    return 0;
+  }
+  function rerollMods(rng2, item) {
+    item.mods = [];
+    const n = rollModCount(rng2, item.rarity);
+    for (let i = 0; i < n; i++) addRandomMod(rng2, item);
+  }
+  function rareName(rng2, slot) {
+    return `${rng2.pick(RARE_NAME_PARTS.first)} ${rng2.pick(RARE_NAME_PARTS.second[slot])}`;
+  }
+  function setRarity(rng2, item, rarity) {
+    item.rarity = rarity;
+    item.name = rarity === "rare" ? rareName(rng2, BASES[item.baseId].slot) : null;
+  }
+  function pickBase(rng2, ilvl, slot = null) {
+    const bases = Object.entries(BASES).filter(([, b]) => b.ilvl <= ilvl && (!slot || b.slot === slot));
+    const [id] = rng2.weighted(bases, ([, b]) => 1 + 2 * (b.ilvl / Math.max(1, ilvl)));
+    return id;
+  }
+  function makeItem(rng2, uid, { baseId, ilvl, rarity = "normal" }) {
+    const item = { uid, baseId, ilvl, rarity: "normal", name: null, mods: [] };
+    setRarity(rng2, item, rarity);
+    rerollMods(rng2, item);
+    return item;
+  }
+  function rollRarity(rng2, forceAtLeast = null) {
+    if (forceAtLeast === "rare") return "rare";
+    return rng2.weighted(Object.entries(DROPS.rarityWeights), (e) => e[1])[0];
+  }
+  function rollCurrencyType(rng2) {
+    return rng2.weighted(Object.entries(CURRENCY), ([, c]) => c.weight)[0];
+  }
+  function rollMonsterDrops(rng2, monster, newUid2) {
+    const out = { items: [], currency: {} };
+    const ilvl = monster.level;
+    if (monster.isBoss) {
+      for (let i = 0; i < DROPS.bossItems; i++) {
+        const rarity = i === 0 ? "rare" : rollRarity(rng2);
+        out.items.push(makeItem(rng2, newUid2(), { baseId: pickBase(rng2, ilvl), ilvl, rarity }));
+      }
+      for (let i = 0; i < DROPS.bossCurrency; i++) {
+        const c = rollCurrencyType(rng2);
+        out.currency[c] = (out.currency[c] || 0) + 1;
+      }
+      return out;
+    }
+    const mult = monster.dropMult;
+    if (rng2.chance(DROPS.itemChance * mult)) {
+      out.items.push(makeItem(rng2, newUid2(), { baseId: pickBase(rng2, ilvl), ilvl, rarity: rollRarity(rng2) }));
+    }
+    if (rng2.chance(DROPS.currencyChance * mult)) {
+      const c = rollCurrencyType(rng2);
+      out.currency[c] = 1;
+    }
+    return out;
+  }
+
+  // src/crafting.js
+  var CRAFTS = {
+    kindling: {
+      check: (item) => item.rarity !== "normal" ? "Kindling only works on Normal items." : null,
+      apply(rng2, item) {
+        setRarity(rng2, item, "magic");
+        rerollMods(rng2, item);
+      }
+    },
+    tempest: {
+      check: (item) => item.rarity !== "magic" ? "Tempest only works on Magic items." : null,
+      apply(rng2, item) {
+        rerollMods(rng2, item);
+      }
+    },
+    forge: {
+      check: (item) => item.rarity !== "normal" ? "Forge only works on Normal items." : null,
+      apply(rng2, item) {
+        setRarity(rng2, item, "rare");
+        rerollMods(rng2, item);
+      }
+    },
+    ash: {
+      check: (item) => item.rarity === "normal" ? "This item is already Normal." : null,
+      apply(rng2, item) {
+        setRarity(rng2, item, "normal");
+        item.mods = [];
+      }
+    },
+    wildfire: {
+      check: (item) => item.rarity !== "rare" ? "Wildfire only works on Rare items." : null,
+      apply(rng2, item) {
+        rerollMods(rng2, item);
+      }
+    },
+    crown: {
+      check(item) {
+        if (item.rarity !== "rare") return "Crown only works on Rare items.";
+        if (!eligibleFamilies(item).length) return "This item has no open mod slots.";
+        return null;
+      },
+      apply(rng2, item) {
+        addRandomMod(rng2, item);
+      }
+    }
+  };
+  function canCraft(currencyId, item, currency) {
+    if ((currency[currencyId] || 0) < 1) return `You have no ${CURRENCY[currencyId].name}.`;
+    return CRAFTS[currencyId].check(item);
+  }
+  function craft(rng2, currencyId, item, currency) {
+    const reason = canCraft(currencyId, item, currency);
+    if (reason) return { ok: false, reason };
+    currency[currencyId] -= 1;
+    CRAFTS[currencyId].apply(rng2, item);
+    return { ok: true };
+  }
+  function salvageValue(item) {
+    return SCRAP.salvage[item.rarity];
+  }
+  function smithTier(familyId, ilvl) {
+    const avail = tiersAt(familyId, ilvl);
+    if (!avail.length) return null;
+    const capped = avail.filter((t) => t.tier <= SCRAP.smithMaxTier);
+    return capped.length ? capped[capped.length - 1].tier : avail[0].tier;
+  }
+  function smithCost(tier) {
+    return SCRAP.smithBase + SCRAP.smithPerTier * tier;
+  }
+  function smithOptions(item) {
+    const asItem = item.rarity === "normal" ? { ...item, rarity: "magic" } : item;
+    const types = openAffixTypes(asItem);
+    return eligibleFamilies(asItem, types).map((family) => {
+      const tier = smithTier(family, item.ilvl);
+      return { family, tier, cost: smithCost(tier) };
+    });
+  }
+  function smithCraft(rng2, item, familyId, scrap) {
+    const opt = smithOptions(item).find((o) => o.family === familyId);
+    if (!opt) return { ok: false, reason: "That mod cannot be added to this item." };
+    if (scrap < opt.cost) return { ok: false, reason: `Needs ${opt.cost} Scrap. You have ${scrap}.` };
+    if (item.rarity === "normal") setRarity(rng2, item, "magic");
+    item.mods.push({ family: familyId, tier: opt.tier, value: rollModValue(rng2, familyId, opt.tier), smithed: true });
+    sortMods(item);
+    return { ok: true, cost: opt.cost };
+  }
+  function convert(currency, index) {
+    const c = CONVERSIONS[index];
+    if ((currency[c.from] || 0) < c.amount) {
+      return { ok: false, reason: `Needs ${c.amount} ${CURRENCY[c.from].name}.` };
+    }
+    currency[c.from] -= c.amount;
+    currency[c.to] = (currency[c.to] || 0) + 1;
+    return { ok: true };
+  }
+
+  // src/game.js
+  var SAVE_VERSION = 1;
+  var DT = 1 / RULES.ticksPerSecond;
+  var RECENT_SECONDS = 8;
+  var runtimes = /* @__PURE__ */ new WeakMap();
+  function rt(state2) {
+    let r = runtimes.get(state2);
+    if (!r) {
+      const rng2 = createRng(state2.seed);
+      rng2.setState(state2.rngState);
+      r = { rng: rng2, stats: null };
+      runtimes.set(state2, r);
+    }
+    return r;
+  }
+  function rng(state2) {
+    return rt(state2).rng;
+  }
+  function getZone(id) {
+    return ZONES.find((z) => z.id === id);
+  }
+  function xpToNext(level) {
+    return Math.round(PLAYER.xp.base * PLAYER.xp.growth ** level);
+  }
+  function getStats(state2) {
+    const r = rt(state2);
+    if (!r.stats) r.stats = computeStats(state2.character);
+    return r.stats;
+  }
+  function invalidateStats(state2) {
+    rt(state2).stats = null;
+    const s = getStats(state2);
+    state2.player.life = Math.min(state2.player.life, s.life);
+    state2.player.mana = Math.min(state2.player.mana, s.mana);
+  }
+  function newUid(state2) {
+    return () => state2.nextUid++;
+  }
+  function newMonsterId(state2) {
+    return () => state2.nextMonsterId++;
+  }
+  function log(state2, cls, text) {
+    state2.log.push({ t: state2.time, cls, text });
+    if (state2.log.length > RULES.combatLogSize) state2.log.splice(0, state2.log.length - RULES.combatLogSize);
+  }
+  function newGame(seed = (Date.now() ^ 24301) >>> 0) {
+    const state2 = {
+      version: SAVE_VERSION,
+      seed,
+      rngState: seed,
+      time: 0,
+      character: { level: 1, xp: 0, skillId: "cleave", equipment: { weapon: null, body: null, ring: null } },
+      player: { life: 1, mana: 1, attackTimer: 0 },
+      inventory: [],
+      currency: Object.fromEntries(CURRENCY_ORDER.map((c) => [c, 0])),
+      scrap: 0,
+      progress: { unlocked: 1, cleared: [] },
+      zoneId: 1,
+      autoAdvance: true,
+      run: null,
+      runHistory: [],
+      log: [],
+      nextUid: 1,
+      nextMonsterId: 1,
+      lifetime: { kills: 0, deaths: 0, runs: 0 }
+    };
+    const r = rng(state2);
+    state2.character.equipment.weapon = makeItem(r, state2.nextUid++, { baseId: "rusted_blade", ilvl: 1 });
+    state2.character.equipment.body = makeItem(r, state2.nextUid++, { baseId: "leather_vest", ilvl: 1 });
+    const s = getStats(state2);
+    state2.player.life = s.life;
+    state2.player.mana = s.mana;
+    startRun(state2, 1);
+    log(state2, "info", "Your character sets out for The Sunken Yard.");
+    return state2;
+  }
+  function newRecord(state2, zoneId) {
+    return {
+      zoneId,
+      start: state2.time,
+      end: null,
+      outcome: "running",
+      packs: [],
+      bossStart: null,
+      bossSeconds: null,
+      bossMaxLife: null,
+      deaths: [],
+      worstHits: {},
+      fightTime: 0,
+      starvedTime: 0,
+      damageByType: {},
+      xp: 0,
+      items: 0,
+      currency: 0
+    };
+  }
+  function startRun(state2, zoneId) {
+    const s = getStats(state2);
+    state2.zoneId = zoneId;
+    state2.player.life = s.life;
+    state2.player.mana = s.mana;
+    state2.player.attackTimer = 0;
+    state2.run = {
+      zoneId,
+      phase: "travel",
+      timer: RULES.travelSeconds,
+      packIndex: 0,
+      pack: null,
+      packStart: 0,
+      pendingLoot: { items: [], currency: {} },
+      recentHits: [],
+      lastHit: null,
+      record: newRecord(state2, zoneId)
+    };
+  }
+  function regen(state2, dt2, outOfCombat = false) {
+    const s = getStats(state2);
+    const p = state2.player;
+    const extra = outOfCombat ? s.life * PLAYER.outOfCombatRegenPctPerSec : 0;
+    p.life = Math.min(s.life, p.life + (s.lifeRegen + extra) * dt2);
+    p.mana = Math.min(s.mana, p.mana + s.manaRegen * dt2);
+  }
+  function tick(state2) {
+    const run = state2.run;
+    state2.time += DT;
+    switch (run.phase) {
+      case "travel":
+        regen(state2, DT, true);
+        run.timer -= DT;
+        if (run.timer <= 0) spawnNext(state2);
+        break;
+      case "fight":
+        fightTick(state2);
+        break;
+      case "dead":
+        run.timer -= DT;
+        if (run.timer <= 0) startRun(state2, state2.zoneId);
+        break;
+      case "done":
+        regen(state2, DT, true);
+        run.timer -= DT;
+        if (run.timer <= 0) startRun(state2, nextZoneChoice(state2));
+        break;
+      default:
+        break;
+    }
+    state2.rngState = rng(state2).getState();
+  }
+  function runTicks(state2, n) {
+    for (let i = 0; i < n; i++) tick(state2);
+  }
+  function nextZoneChoice(state2) {
+    return state2.autoAdvance ? state2.progress.unlocked : state2.zoneId;
+  }
+  function spawnNext(state2) {
+    const run = state2.run;
+    const zone = getZone(run.zoneId);
+    const r = rng(state2);
+    if (run.packIndex < zone.packs) {
+      run.pack = makePack(r, zone, newMonsterId(state2));
+    } else {
+      run.pack = makeBossPack(r, zone, newMonsterId(state2));
+      run.record.bossStart = state2.time;
+      run.record.bossMaxLife = run.pack.monsters[0].maxLife;
+      log(state2, "boss", `${run.pack.monsters[0].name} appears (${run.pack.monsters[0].maxLife.toLocaleString()} life).`);
+    }
+    run.packStart = state2.time;
+    run.phase = "fight";
+  }
+  function fightTick(state2) {
+    const run = state2.run;
+    const p = state2.player;
+    const s = getStats(state2);
+    const rec = run.record;
+    rec.fightTime += DT;
+    p.attackTimer -= DT;
+    if (p.attackTimer <= 0) {
+      if (p.mana >= s.damage.manaCost) {
+        p.mana -= s.damage.manaCost;
+        playerAttack(state2, s);
+        p.attackTimer += 1 / s.damage.aps;
+      } else {
+        rec.starvedTime += DT;
+        p.attackTimer = 0;
+      }
+    }
+    if (run.pack.monsters.every((m) => m.life <= 0)) {
+      packCleared(state2);
+      return;
+    }
+    for (const m of run.pack.monsters) {
+      if (m.life <= 0) continue;
+      m.attackTimer -= DT;
+      if (m.attackTimer <= 0) {
+        monsterHit(state2, s, m, 1);
+        m.attackTimer += m.interval;
+        if (p.life <= 0) return playerDied(state2, m);
+      }
+      if (m.bigHit) {
+        const b = m.bigHit;
+        b.timer -= DT;
+        if (!b.warned && b.timer <= b.windup) {
+          b.warned = true;
+          log(state2, "boss", `${m.name} winds up a heavy blow\u2026`);
+        }
+        if (b.timer <= 0) {
+          monsterHit(state2, s, m, b.mult, true);
+          b.timer += b.interval;
+          b.warned = false;
+          if (p.life <= 0) return playerDied(state2, m);
+        }
+      }
+    }
+    regen(state2, DT);
+  }
+  function playerAttack(state2, s) {
+    const r = rng(state2);
+    const d = s.damage;
+    const targets = state2.run.pack.monsters.filter((m) => m.life > 0).slice(0, d.targets);
+    const parts = [];
+    for (const m of targets) {
+      let dmg = r.range(d.hitMin, d.hitMax);
+      const crit = r.chance(d.critChance / 100);
+      if (crit) dmg *= d.critMulti;
+      dmg = Math.max(1, Math.round(dmg));
+      m.life -= dmg;
+      parts.push(crit ? `${dmg}!` : `${dmg}`);
+      if (m.life <= 0) monsterKilled(state2, m);
+    }
+    log(state2, "hit", `${s.skill.name} hits ${targets.length} for ${parts.join(", ")}`);
+  }
+  function monsterHit(state2, s, m, mult, isBig = false) {
+    var _a;
+    const r = rng(state2);
+    const p = state2.player;
+    const rec = state2.run.record;
+    const raw = m.hit * mult * r.range(1 - MONSTERS.hitVariance, 1 + MONSTERS.hitVariance);
+    const type = m.damageType;
+    let taken;
+    if (type === "physical") {
+      if (r.chance(evadeChance(s.evasion, m.level))) {
+        log(state2, "evade", `Evaded ${m.name}'s attack.`);
+        return;
+      }
+      taken = raw * (1 - armourReduction(s.armour, raw));
+    } else {
+      taken = raw * (1 - effectiveRes(s, type, state2.run.zoneId) / 100);
+    }
+    taken = Math.max(0, taken);
+    p.life -= taken;
+    state2.run.lastHit = { raw, taken, type, isBig };
+    const recent = (_a = state2.run).recentHits || (_a.recentHits = []);
+    recent.push({ t: state2.time, threat: m.isBoss ? "boss" : m.threat, type, taken, raw, isBig });
+    while (recent.length && recent[0].t < state2.time - RECENT_SECONDS) recent.shift();
+    rec.damageByType[type] = (rec.damageByType[type] || 0) + taken;
+    const key = `${m.isBoss ? "boss" : m.threat}:${type}${isBig ? ":big" : ""}`;
+    const pct2 = taken / s.life;
+    const prev = rec.worstHits[key];
+    if (!prev || pct2 > prev.pct) {
+      rec.worstHits[key] = {
+        threat: m.isBoss ? "boss" : m.threat,
+        type,
+        isBig,
+        raw,
+        taken,
+        pct: pct2,
+        source: m.name,
+        maxLife: s.life,
+        res: type === "physical" ? null : effectiveRes(s, type, state2.run.zoneId),
+        armourPct: type === "physical" ? armourReduction(s.armour, raw) : null
+      };
+    }
+    const verb = isBig ? "SLAMS you" : "hits you";
+    log(state2, `taken ${type}`, `${m.name} ${verb} for ${Math.round(taken)} ${type} (${Math.round(raw)} before mitigation).`);
+  }
+  function monsterKilled(state2, m) {
+    state2.lifetime.kills++;
+    const rec = state2.run.record;
+    const L = state2.character.level;
+    let xp = MONSTERS.xpBase * MONSTERS.xpGrowth ** m.level * m.xpMult;
+    const over = L - m.level - PLAYER.xpGraceLevels;
+    if (over > 0) xp *= Math.max(0, 1 - over * PLAYER.xpPenaltyPerLevel);
+    gainXp(state2, xp);
+    rec.xp += xp;
+    const drops = rollMonsterDrops(rng(state2), m, newUid(state2));
+    const pl = state2.run.pendingLoot;
+    pl.items.push(...drops.items);
+    for (const [c, n] of Object.entries(drops.currency)) pl.currency[c] = (pl.currency[c] || 0) + n;
+    if (m.isBoss || m.rarity === "rare") log(state2, "kill", `${m.name} dies.`);
+  }
+  function gainXp(state2, amount) {
+    const ch = state2.character;
+    if (ch.level >= PLAYER.levelCap) return;
+    ch.xp += amount;
+    while (ch.level < PLAYER.levelCap && ch.xp >= xpToNext(ch.level)) {
+      ch.xp -= xpToNext(ch.level);
+      ch.level++;
+      invalidateStats(state2);
+      const s = getStats(state2);
+      state2.player.life = s.life;
+      state2.player.mana = s.mana;
+      log(state2, "level", `Level up! Now level ${ch.level}. Life ${s.life}.`);
+    }
+    if (ch.level >= PLAYER.levelCap) ch.xp = 0;
+  }
+  function packCleared(state2) {
+    const run = state2.run;
+    const rec = run.record;
+    const zone = getZone(run.zoneId);
+    const seconds = state2.time - run.packStart;
+    pickUpLoot(state2);
+    if (run.pack.threat === "boss") {
+      rec.bossSeconds = seconds;
+      runComplete(state2);
+      return;
+    }
+    rec.packs.push({ threat: run.pack.threat, element: run.pack.element, seconds, size: run.pack.monsters.length });
+    run.packIndex++;
+    run.pack = null;
+    run.phase = "travel";
+    run.timer = RULES.travelSeconds;
+    if (run.packIndex === zone.packs) log(state2, "info", "The area falls quiet. The boss awaits.");
+  }
+  function pickUpLoot(state2) {
+    const pl = state2.run.pendingLoot;
+    const rec = state2.run.record;
+    for (const item of pl.items) {
+      if (state2.inventory.length >= RULES.inventorySize) {
+        log(state2, "warn", `Inventory full: left ${itemLabel(item)} behind.`);
+        continue;
+      }
+      state2.inventory.push(item);
+      rec.items++;
+      if (item.rarity !== "normal") log(state2, `loot ${item.rarity}`, `Picked up ${item.rarity} ${BASES[item.baseId].name}${item.name ? ` "${item.name}"` : ""}.`);
+    }
+    for (const [c, n] of Object.entries(pl.currency)) {
+      state2.currency[c] += n;
+      rec.currency += n;
+      log(state2, "loot currency", `Picked up ${n} ${c[0].toUpperCase() + c.slice(1)}.`);
+    }
+    state2.run.pendingLoot = { items: [], currency: {} };
+  }
+  function finishRecord(state2, outcome) {
+    const rec = state2.run.record;
+    rec.outcome = outcome;
+    rec.end = state2.time;
+    state2.runHistory.push(rec);
+    if (state2.runHistory.length > RULES.runHistorySize) state2.runHistory.shift();
+    state2.lifetime.runs++;
+  }
+  function runComplete(state2) {
+    const run = state2.run;
+    const zoneId = run.zoneId;
+    finishRecord(state2, "cleared");
+    log(state2, "clear", `${getZone(zoneId).name} cleared in ${Math.round(state2.time - run.record.start)}s.`);
+    if (!state2.progress.cleared.includes(zoneId)) {
+      state2.progress.cleared.push(zoneId);
+      if (getZone(zoneId + 1) && state2.progress.unlocked < zoneId + 1) {
+        state2.progress.unlocked = zoneId + 1;
+        log(state2, "clear", `First clear! ${getZone(zoneId + 1).name} is now open.`);
+      }
+    }
+    run.phase = "done";
+    run.timer = RULES.runEndSeconds;
+  }
+  function playerDied(state2, killer) {
+    const run = state2.run;
+    const rec = run.record;
+    const s = getStats(state2);
+    const hit = run.lastHit || { raw: 0, taken: 0, isBig: false };
+    const groups = {};
+    for (const h of run.recentHits || []) {
+      const k = `${h.threat}:${h.type}`;
+      const g = groups[k] || (groups[k] = { threat: h.threat, type: h.type, taken: 0, hits: 0, biggestRaw: 0 });
+      g.taken += h.taken;
+      g.hits++;
+      g.biggestRaw = Math.max(g.biggestRaw, h.raw);
+    }
+    const recentDamage = Object.values(groups).sort((a, b) => b.taken - a.taken);
+    const raw = hit.raw;
+    const type = killer.damageType;
+    rec.deaths.push({
+      source: killer.name,
+      threat: killer.isBoss ? "boss" : killer.threat,
+      type,
+      raw,
+      taken: hit.taken,
+      isBig: hit.isBig,
+      maxLife: s.life,
+      res: type === "physical" ? null : effectiveRes(s, type, run.zoneId),
+      maxRes: type === "physical" ? null : s.maxRes[type],
+      armour: s.armour,
+      damageByType: { ...rec.damageByType },
+      recentDamage,
+      atBoss: killer.isBoss
+    });
+    state2.lifetime.deaths++;
+    const ch = state2.character;
+    const loss = xpToNext(ch.level) * PLAYER.deathXpLossPct;
+    ch.xp = Math.max(0, ch.xp - loss);
+    const lostItems = run.pendingLoot.items.length;
+    run.pendingLoot = { items: [], currency: {} };
+    log(state2, "death", `You were slain by ${killer.name}.${lostItems ? ` ${lostItems} unclaimed item(s) lost.` : ""}`);
+    finishRecord(state2, "died");
+    state2.player.life = 0;
+    run.phase = "dead";
+    run.timer = PLAYER.respawnSeconds;
+  }
+  function findItem(state2, uid) {
+    const idx = state2.inventory.findIndex((i) => i.uid === uid);
+    if (idx >= 0) return { item: state2.inventory[idx], where: "inventory", idx };
+    for (const slot of SLOTS) {
+      const it = state2.character.equipment[slot];
+      if (it && it.uid === uid) return { item: it, where: slot };
+    }
+    return null;
+  }
+  function equip(state2, uid) {
+    const f = findItem(state2, uid);
+    if (!f || f.where !== "inventory") return { ok: false, reason: "Item not in inventory." };
+    const slot = BASES[f.item.baseId].slot;
+    const old = state2.character.equipment[slot];
+    state2.inventory.splice(f.idx, 1);
+    if (old) state2.inventory.splice(f.idx, 0, old);
+    state2.character.equipment[slot] = f.item;
+    invalidateStats(state2);
+    return { ok: true };
+  }
+  function unequip(state2, slot) {
+    const it = state2.character.equipment[slot];
+    if (!it) return { ok: false, reason: "Nothing equipped there." };
+    if (state2.inventory.length >= RULES.inventorySize) return { ok: false, reason: "Inventory is full." };
+    state2.character.equipment[slot] = null;
+    state2.inventory.push(it);
+    invalidateStats(state2);
+    return { ok: true };
+  }
+  function salvage(state2, uid) {
+    const f = findItem(state2, uid);
+    if (!f || f.where !== "inventory") return { ok: false, reason: "Only unequipped items can be salvaged." };
+    state2.inventory.splice(f.idx, 1);
+    const v = salvageValue(f.item);
+    state2.scrap += v;
+    return { ok: true, scrap: v };
+  }
+  function salvageAll(state2, rarity) {
+    let total = 0;
+    let count = 0;
+    state2.inventory = state2.inventory.filter((it) => {
+      if (it.rarity !== rarity || it.locked) return true;
+      total += salvageValue(it);
+      count++;
+      return false;
+    });
+    state2.scrap += total;
+    return { ok: true, scrap: total, count };
+  }
+  function toggleLock(state2, uid) {
+    const f = findItem(state2, uid);
+    if (!f) return { ok: false };
+    f.item.locked = !f.item.locked;
+    return { ok: true };
+  }
+  function craftItem(state2, currencyId, uid) {
+    const f = findItem(state2, uid);
+    if (!f) return { ok: false, reason: "Item not found." };
+    const res = craft(rng(state2), currencyId, f.item, state2.currency);
+    if (res.ok && f.where !== "inventory") invalidateStats(state2);
+    state2.rngState = rng(state2).getState();
+    return res;
+  }
+  function smithItem(state2, uid, familyId) {
+    const f = findItem(state2, uid);
+    if (!f) return { ok: false, reason: "Item not found." };
+    const res = smithCraft(rng(state2), f.item, familyId, state2.scrap);
+    if (res.ok) {
+      state2.scrap -= res.cost;
+      if (f.where !== "inventory") invalidateStats(state2);
+    }
+    state2.rngState = rng(state2).getState();
+    return res;
+  }
+  function convertCurrency(state2, index) {
+    return convert(state2.currency, index);
+  }
+  function selectZone(state2, zoneId) {
+    if (zoneId > state2.progress.unlocked || !getZone(zoneId)) return { ok: false, reason: "Zone is locked." };
+    if (zoneId < state2.progress.unlocked) state2.autoAdvance = false;
+    if (state2.run && state2.run.phase !== "dead") {
+      log(state2, "info", `Leaving for ${getZone(zoneId).name}.`);
+    }
+    startRun(state2, zoneId);
+    return { ok: true };
+  }
+  function setAutoAdvance(state2, on) {
+    state2.autoAdvance = on;
+  }
+  function statsWithItem(state2, item) {
+    const slot = BASES[item.baseId].slot;
+    const ch = { ...state2.character, equipment: { ...state2.character.equipment, [slot]: item } };
+    return computeStats(ch);
+  }
+  function serialize(state2) {
+    return JSON.stringify(state2);
+  }
+  function deserialize(text) {
+    const data = JSON.parse(text);
+    const state2 = migrate(data);
+    if (!state2.run || !getZone(state2.run.zoneId)) startRun(state2, state2.zoneId || 1);
+    return state2;
+  }
+  function migrate(data) {
+    if (!data || typeof data !== "object" || !data.version) throw new Error("Not a Wallbreaker save.");
+    if (data.version > SAVE_VERSION) throw new Error("Save is from a newer version.");
+    return data;
+  }
+
+  // src/diagnosis.js
+  var WINDOW_RUNS = 5;
+  var WINDOW_SECONDS = 180;
+  var fmt = (n) => Math.round(n).toLocaleString("en-US");
+  var cap = (s) => s[0].toUpperCase() + s.slice(1);
+  function threatLabel(threat) {
+    return threat === "boss" ? "the boss" : `a ${THREATS[threat].name}`;
+  }
+  function diagnosisWindow(state2) {
+    const zoneId = state2.zoneId;
+    const finished = state2.runHistory.filter((r) => r.zoneId === zoneId);
+    const lastN = finished.slice(-WINDOW_RUNS);
+    const recent = finished.filter((r) => r.end >= state2.time - WINDOW_SECONDS);
+    const win = recent.length > lastN.length ? recent : lastN;
+    const cur = state2.run && state2.run.record;
+    return cur && cur.outcome === "running" && cur.zoneId === zoneId ? [...win, cur] : win;
+  }
+  function resLine(stats, type, zoneId) {
+    const eff = effectiveRes(stats, type, zoneId);
+    return `Your ${type} resistance is ${fmt(eff)}% (max ${stats.maxRes[type]}%).`;
+  }
+  function physLine(stats, raw, zone) {
+    const red = raw > 0 ? stats.armour / (stats.armour + 5 * raw) : 0;
+    const ev = zone ? evadeChance(stats.evasion, zone.level) : 0;
+    return `Your armour (${fmt(stats.armour)}) stops ${fmt(Math.min(0.9, red) * 100)}% of a hit that size, you evade ${fmt(ev * 100)}% of attacks, and you have ${fmt(stats.life)} life.`;
+  }
+  function threatPlural(threat) {
+    return threat === "boss" ? "The boss" : `${THREATS[threat].name}s`;
+  }
+  function mainKiller(d) {
+    const top = d.recentDamage && d.recentDamage[0];
+    if (top) return top;
+    return { threat: d.threat, type: d.type, taken: d.taken, hits: 1, biggestRaw: d.raw };
+  }
+  function lookAtFor(type) {
+    if (type === "physical") return "Armour, Evasion, maximum Life";
+    if (type === "chaos") return "Chaos resistance, Life regeneration";
+    return `${cap(type)} resistance, maximum Life`;
+  }
+  function diagnose(state2, stats) {
+    var _a;
+    const zone = ZONES.find((z) => z.id === state2.zoneId);
+    const runs = diagnosisWindow(state2);
+    const causes = [];
+    const deaths = runs.flatMap((r) => r.deaths);
+    if (deaths.length >= 2) {
+      const counts = {};
+      const key = (d) => {
+        const k2 = mainKiller(d);
+        return `${k2.threat}:${k2.type}`;
+      };
+      for (const d of deaths) counts[key(d)] = (counts[key(d)] || 0) + 1;
+      let best = deaths[deaths.length - 1];
+      for (const d of deaths) if (counts[key(d)] > counts[key(best)]) best = d;
+      const k = mainKiller(best);
+      const n = counts[key(best)];
+      const detailStat = k.type === "physical" ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, state2.zoneId);
+      let message;
+      if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
+        const what = best.isBig && k.threat === "boss" ? "the boss's heavy blow" : threatLabel(k.threat);
+        message = `Killed by a ${fmt(k.biggestRaw)} ${k.type} hit from ${what}. ${detailStat}`;
+      } else {
+        message = k.threat === "boss" ? `Worn down by the boss: it dealt ${fmt(k.taken)} ${k.type} damage in your last ${RECENT_SECONDS} seconds (${k.hits} hits). ${detailStat}` : `Overwhelmed by ${threatPlural(k.threat)}: they dealt ${fmt(k.taken)} ${k.type} damage in your last ${RECENT_SECONDS} seconds (${k.hits} hits). ${detailStat}`;
+      }
+      causes.push({
+        state: "Dying",
+        score: 100 + deaths.length * 10,
+        damageType: k.type,
+        message,
+        detail: `${deaths.length} deaths in your last ${runs.length} runs here (${n} mainly from ${k.type} damage by ${k.threat === "boss" ? "the boss" : `${THREATS[k.threat].name}s`}).`,
+        lookAt: lookAtFor(k.type)
+      });
+    }
+    let worst = null;
+    for (const r of runs) {
+      for (const h of Object.values(r.worstHits)) {
+        if (h.pct > 0.5 && (!worst || h.pct > worst.pct)) worst = h;
+      }
+    }
+    if (worst) {
+      const who = worst.threat === "boss" ? worst.isBig ? "The boss's heavy blows" : "Boss hits" : `${THREATS[worst.threat].name} ${worst.type === "physical" && worst.threat === "brute" ? "slams" : "hits"}`;
+      const tail = worst.type === "physical" ? `More armour or life would help. ${physLine(stats, worst.raw, zone)}` : resLine(stats, worst.type, state2.zoneId);
+      causes.push({
+        state: "Fragile",
+        score: 50 + worst.pct * 50,
+        damageType: worst.type,
+        message: `${who} take ${fmt(worst.pct * 100)}% of your life (${fmt(worst.taken)} ${worst.type} of ${fmt(worst.maxLife)}). ${tail}`,
+        lookAt: lookAtFor(worst.type)
+      });
+    }
+    if (zone) {
+      const byThreat = {};
+      for (const r of runs) {
+        for (const p of r.packs) (byThreat[_a = p.threat] || (byThreat[_a] = [])).push(p.seconds);
+      }
+      let slowest = null;
+      for (const [threat, times] of Object.entries(byThreat)) {
+        const avg = times.reduce((a, b) => a + b, 0) / times.length;
+        const ratio = avg / zone.targetPackSeconds;
+        if (ratio > 3 && (!slowest || ratio > slowest.ratio)) slowest = { threat, avg, ratio };
+      }
+      if (slowest) {
+        const d = stats.damage;
+        const hint = slowest.threat === "swarm" ? `Your skill hits ${d.targets} targets per use.` : `You deal ${fmt(d.dps)} damage per second to each target.`;
+        causes.push({
+          state: "Slow",
+          score: 30 + slowest.ratio * 5,
+          message: `${THREATS[slowest.threat].name} packs take ${fmt(slowest.avg)}s each (target ${zone.targetPackSeconds}s). ${hint}`,
+          lookAt: slowest.threat === "swarm" ? "Targets hit, damage per hit" : "Damage, attack speed, critical strikes"
+        });
+      }
+    }
+    const fight = runs.reduce((a, r) => a + r.fightTime, 0);
+    const starved = runs.reduce((a, r) => a + r.starvedTime, 0);
+    if (fight > 5 && starved / fight > 0.2) {
+      const d = stats.damage;
+      causes.push({
+        state: "Starved",
+        score: 40 + starved / fight * 100,
+        message: `Out of mana ${fmt(starved / fight * 100)}% of the time. Your skill uses ${d.manaPerSecond.toFixed(1)} mana per second; you regenerate ${stats.manaRegen.toFixed(1)}.`,
+        lookAt: "Maximum mana, mana regeneration"
+      });
+    }
+    const bossDeaths = deaths.filter((d) => d.atBoss).length;
+    let longest = 0;
+    let bossLife = null;
+    for (const r of runs) {
+      if (r.bossMaxLife) bossLife = r.bossMaxLife;
+      const secs = r.bossSeconds ?? (r.bossStart != null ? (r.end ?? state2.time) - r.bossStart : 0);
+      longest = Math.max(longest, secs);
+    }
+    if (bossLife && (longest > 60 || bossDeaths > 0)) {
+      const ttk = bossLife / Math.max(1, stats.damage.dps);
+      const why = bossDeaths > 0 ? `It killed you ${bossDeaths} time${bossDeaths > 1 ? "s" : ""}. ` : "";
+      causes.push({
+        state: "Stuck on boss",
+        score: 60 + bossDeaths * 15,
+        message: `${why}The boss has ${fmt(bossLife)} life. At your ${fmt(stats.damage.dps)} single-target DPS that takes ${fmt(ttk)}s.`,
+        lookAt: bossDeaths > 0 ? "Single-target damage, max hit taken" : "Single-target damage"
+      });
+    }
+    causes.sort((a, b) => b.score - a.score);
+    const primary = causes[0] || null;
+    const rest = causes.slice(1).filter((c) => !(primary && primary.state === "Dying" && c.state === "Fragile" && c.damageType === primary.damageType));
+    return {
+      stalled: !!primary,
+      primary,
+      secondary: rest.slice(0, 2),
+      runsConsidered: runs.length
+    };
+  }
+
+  // src/ui/format.js
+  var fmt2 = (n) => Math.round(n).toLocaleString("en-US");
+  var fmt1 = (n) => (Math.round(n * 10) / 10).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var cap2 = (s) => s[0].toUpperCase() + s.slice(1);
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+  function modText(m) {
+    const fam = MODS[m.family];
+    return fam.text.replace("{v}", m.value).replace("{v2}", m.value * 2);
+  }
+  function implicitText(imp) {
+    const map = {
+      life: `+${imp.value} to maximum Life`,
+      armour: `+${imp.value} to Armour`,
+      evasion: `+${imp.value} to Evasion`,
+      fireRes: `+${imp.value}% to Fire Resistance`
+    };
+    return map[imp.stat] || `${imp.stat} ${imp.value}`;
+  }
+  function baseLine(item) {
+    const b = BASES[item.baseId];
+    if (b.slot === "weapon") return `Physical ${b.damage[0]}\u2013${b.damage[1]} \xB7 ${b.aps.toFixed(2)} attacks/s \xB7 ${b.crit}% crit`;
+    return (b.implicits || []).map(implicitText).join(" \xB7 ");
+  }
+  function itemTitle(item) {
+    const b = BASES[item.baseId];
+    return item.name ? item.name : b.name;
+  }
+  function timeAgo(seconds) {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  }
+
+  // src/ui/render.js
+  var dt = (type) => `<span class="dt dt-${type}">${type}</span>`;
+  function bar(cls, value, max, label) {
+    const w = max > 0 ? Math.max(0, Math.min(100, value / max * 100)) : 0;
+    return `<div class="bar ${cls}" role="meter" aria-valuemin="0" aria-valuemax="${Math.round(max)}" aria-valuenow="${Math.round(value)}">
+    <div class="bar-fill" style="width:${w}%"></div><div class="bar-label">${label}</div></div>`;
+  }
+  function mixShares(zone) {
+    const total = zone.mix.reduce((a, m) => a + m.weight, 0);
+    return zone.mix.map((m) => ({ ...m, share: m.weight / total * 100 }));
+  }
+  function threatChip(m) {
+    const T2 = THREATS[m.threat];
+    const type = m.threat === "caster" ? m.element : T2.damageType;
+    return `<span class="chip threat"><span class="dot dot-${type}"></span>${T2.name}${m.threat === "caster" ? ` (${m.element})` : ""} <span class="muted">${Math.round(m.share)}%</span></span>`;
+  }
+  function renderZones(state2) {
+    return ZONES.map((z) => {
+      const locked = z.id > state2.progress.unlocked;
+      const cleared = state2.progress.cleared.includes(z.id);
+      const current = state2.zoneId === z.id;
+      const status = locked ? "Locked" : cleared ? "Cleared" : "Not cleared";
+      return `<button class="zone ${current ? "current" : ""} ${locked ? "locked" : ""}" data-action="zone" data-zone="${z.id}" ${locked ? "disabled" : ""} aria-pressed="${current}">
+      <span class="zone-num">${z.id}</span>
+      <span class="zone-body"><span class="zone-name">${esc(z.name)}</span>
+      <span class="zone-meta">Monster level ${z.level} \xB7 ${status}</span></span></button>`;
+    }).join("");
+  }
+  function renderVitals(state2) {
+    const s = getStats(state2);
+    const ch = state2.character;
+    const p = state2.player;
+    const need = xpToNext(ch.level);
+    const d = s.damage;
+    const zone = getZone(state2.zoneId);
+    const mh = maxHitTaken(s, state2.zoneId);
+    const bossLife = monsterBaseLife(zone.level) * THREATS.boss.lifeMult;
+    const ttk = bossLife / Math.max(1, d.dps);
+    const resRow = (t) => {
+      const eff = effectiveRes(s, t, state2.zoneId);
+      const low = eff < 0 ? "neg" : eff < 30 ? "low" : "";
+      return `<div class="kv"><span>${dt(t)} res</span><b class="${low}">${fmt2(eff)}% <span class="muted">/ ${s.maxRes[t]}%</span></b></div>`;
+    };
+    return `
+    <div class="level-row"><span class="level">Level ${ch.level}</span><span class="muted small">${fmt2(ch.xp)} / ${fmt2(need)} XP</span></div>
+    ${bar("xp", ch.xp, need, "")}
+    ${bar("life", Math.max(0, p.life), s.life, `Life ${fmt2(Math.max(0, p.life))} / ${fmt2(s.life)}`)}
+    ${bar("mana", p.mana, s.mana, `Mana ${fmt2(p.mana)} / ${fmt2(s.mana)}`)}
+    <h3>Offence <span class="muted small">${s.skill.name}</span></h3>
+    <div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
+    <div class="kv"><span>Hit</span><b>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)}</b></div>
+    <div class="kv"><span>Attacks per second</span><b>${d.aps.toFixed(2)}</b></div>
+    <div class="kv"><span>Targets per use</span><b>${d.targets}</b></div>
+    <div class="kv"><span>Crit chance / multiplier</span><b>${fmt1(d.critChance)}% / ${Math.round(d.critMulti * 100)}%</b></div>
+    <div class="kv"><span>Mana per second</span><b>${fmt1(d.manaPerSecond)} <span class="muted">(regen ${fmt1(s.manaRegen)})</span></b></div>
+    <h3>Defence</h3>
+    <div class="kv"><span>Armour</span><b>${fmt2(s.armour)}</b></div>
+    <div class="kv"><span>Evasion</span><b>${fmt2(s.evasion)}</b></div>
+    <div class="kv"><span>Life regen</span><b>${fmt1(s.lifeRegen)}/s</b></div>
+    ${["fire", "cold", "lightning", "chaos"].map(resRow).join("")}
+    <h3>Max hit you can survive</h3>
+    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap2(t)}<b>${fmt2(mh[t])}</b></div>`).join("")}</div>
+    <div class="kv boss-ttk"><span>Time to kill ${esc(zone.boss.name)}</span><b>${fmt2(ttk)}s</b></div>
+  `;
+  }
+  function renderRun(state2) {
+    const run = state2.run;
+    const zone = getZone(run.zoneId);
+    let phase = "";
+    if (run.phase === "travel") phase = run.packIndex >= zone.packs ? "Approaching the boss\u2026" : "Walking to the next pack\u2026";
+    else if (run.phase === "dead") phase = `<span class="neg">You died.</span> Respawning in ${Math.ceil(run.timer)}s.`;
+    else if (run.phase === "done") phase = '<span class="good">Zone cleared.</span> Starting the next run\u2026';
+    const progress = run.packIndex >= zone.packs ? "Boss" : `Pack ${Math.min(run.packIndex + 1, zone.packs)} of ${zone.packs}`;
+    let monsters = "";
+    if (run.phase === "fight" && run.pack) {
+      const alive = run.pack.monsters.filter((m) => m.life > 0).length;
+      monsters = `<div class="pack-head">${alive} of ${run.pack.monsters.length} alive</div>` + run.pack.monsters.map((m) => {
+        const dead = m.life <= 0;
+        const warn = m.bigHit && m.bigHit.warned ? '<span class="windup">Winding up a heavy blow</span>' : "";
+        return `<div class="mon ${dead ? "dead" : ""} r-${m.rarity}">
+        <span class="mon-name"><span class="dot dot-${m.damageType}" title="${m.damageType} damage"></span>${esc(m.name)}</span>
+        ${bar("mlife", Math.max(0, m.life), m.maxLife, dead ? "dead" : `${fmt2(Math.max(0, m.life))}`)}${warn}</div>`;
+      }).join("");
+    } else {
+      monsters = `<div class="phase">${phase}</div>`;
+    }
+    return `
+    <div class="run-head">
+      <div><h2>${esc(zone.name)}</h2><div class="muted small">Monster level ${zone.level} \xB7 ${progress}</div></div>
+      <div class="mix">${mixShares(zone).map(threatChip).join("")}<span class="chip threat"><span class="dot dot-${zone.boss.damageType}"></span>Boss: ${esc(zone.boss.name)}</span></div>
+    </div>
+    <div class="monsters">${monsters}</div>`;
+  }
+  function renderLog(state2) {
+    const items = state2.log.slice(-60).reverse();
+    return items.map((l) => `<li class="log-${l.cls.split(" ").join(" log-")}"><span class="t">${timeAgo(l.t)}</span>${esc(l.text)}</li>`).join("");
+  }
+  function renderDiagnosis(state2) {
+    const s = getStats(state2);
+    const d = diagnose(state2, s);
+    let body;
+    if (!d.stalled) {
+      body = `<div class="diag-badge ok">Progressing</div>
+      <p class="muted">No stall in ${esc(getZone(state2.zoneId).name)} over your last ${d.runsConsidered} run${d.runsConsidered === 1 ? "" : "s"}. When the character gets stuck, the cause shows here.</p>`;
+    } else {
+      const p = d.primary;
+      body = `<div class="diag-badge stalled">Stalled \xB7 ${p.state}</div>
+      <div class="cause primary"><p>${esc(p.message)}</p>${p.detail ? `<p class="muted small">${esc(p.detail)}</p>` : ""}
+      <p class="lookat">Look at: <b>${esc(p.lookAt)}</b></p></div>
+      ${d.secondary.map((c) => `<div class="cause"><div class="cause-state">${c.state}</div><p>${esc(c.message)}</p><p class="lookat">Look at: <b>${esc(c.lookAt)}</b></p></div>`).join("")}`;
+    }
+    const recent = state2.runHistory.slice(-8).reverse();
+    const runs = recent.length ? `<ul class="runs">${recent.map((r) => `<li><span class="zone-tag">Z${r.zoneId}</span><span class="${r.outcome === "died" ? "neg" : "good"}">${r.outcome === "died" ? "Died" : "Cleared"}</span><span class="muted">${r.outcome === "died" ? `pack ${Math.min(r.packs.length + 1, 10)}${r.bossStart != null ? " (boss)" : ""}` : `${Math.round(r.end - r.start)}s`}</span><span class="muted">+${r.items} items</span></li>`).join("")}</ul>` : '<p class="muted small">No finished runs yet.</p>';
+    return `${body}<h3>Recent runs</h3>${runs}
+    <p class="muted small totals">${fmt2(state2.lifetime.kills)} kills \xB7 ${fmt2(state2.lifetime.deaths)} deaths \xB7 ${fmt2(state2.lifetime.runs)} runs</p>`;
+  }
+  function itemCard(item, { equippedIn = null } = {}) {
+    const b = BASES[item.baseId];
+    const lines = item.mods.map((m) => {
+      const fam = MODS[m.family];
+      return `<li><span class="affix" title="${fam.type}">${fam.type === "prefix" ? "P" : "S"}</span><span class="tier">T${m.tier}</span>${esc(modText(m))}${m.smithed ? ' <span class="muted small">(Smith)</span>' : ""}</li>`;
+    }).join("");
+    return `<div class="item-card r-${item.rarity}">
+    <div class="item-name">${esc(itemTitle(item))}${item.locked ? ' <span class="lock" title="Locked: bulk salvage skips it">locked</span>' : ""}</div>
+    <div class="item-sub">${cap2(item.rarity)} ${esc(b.name)} \xB7 ${SLOT_NAMES[b.slot]} \xB7 item level ${item.ilvl}${equippedIn ? " \xB7 <b>equipped</b>" : ""}</div>
+    <div class="item-base">${esc(baseLine(item))}</div>
+    ${lines ? `<ul class="mods">${lines}</ul>` : '<div class="muted small">No mods.</div>'}
+  </div>`;
+  }
+  function compareRows(cur, alt, zoneId) {
+    const mhA = maxHitTaken(cur, zoneId);
+    const mhB = maxHitTaken(alt, zoneId);
+    const rows = [
+      ["Damage per second", cur.damage.dps, alt.damage.dps],
+      ["Targets per use", cur.damage.targets, alt.damage.targets],
+      ["Life", cur.life, alt.life],
+      ["Mana", cur.mana, alt.mana],
+      ["Armour", cur.armour, alt.armour],
+      ["Evasion", cur.evasion, alt.evasion],
+      ["Fire resistance", cur.res.fire, alt.res.fire, "%"],
+      ["Cold resistance", cur.res.cold, alt.res.cold, "%"],
+      ["Lightning resistance", cur.res.lightning, alt.res.lightning, "%"],
+      ["Life regen /s", cur.lifeRegen, alt.lifeRegen],
+      ["Max physical hit", mhA.physical, mhB.physical],
+      ["Max fire hit", mhA.fire, mhB.fire],
+      ["Max cold hit", mhA.cold, mhB.cold],
+      ["Max lightning hit", mhA.lightning, mhB.lightning]
+    ];
+    const out = rows.filter(([, a, b]) => Math.abs(a - b) >= 0.5).map(([label, a, b, unit = ""]) => {
+      const diff = b - a;
+      return `<tr><td>${label}</td><td>${fmt2(a)}${unit}</td><td>${fmt2(b)}${unit}</td><td class="${diff > 0 ? "good" : "neg"}">${diff > 0 ? "+" : "\u2212"}${fmt2(Math.abs(diff))}${unit}</td></tr>`;
+    });
+    return out.length ? `<table class="compare"><thead><tr><th>If equipped</th><th>Now</th><th>After</th><th>Change</th></tr></thead><tbody>${out.join("")}</tbody></table>` : '<p class="muted small">Equipping this changes nothing.</p>';
+  }
+  function craftPanel(state2, item) {
+    const buttons = CURRENCY_ORDER.map((c) => {
+      const reason = canCraft(c, item, state2.currency);
+      return `<button class="cur-btn" data-action="craft" data-cur="${c}" data-uid="${item.uid}" ${reason ? "disabled" : ""} title="${esc(reason || CURRENCY[c].effect)}">
+      <span>${CURRENCY[c].name}</span><span class="count">${state2.currency[c]}</span><span class="cur-eff">${esc(CURRENCY[c].effect)}</span></button>`;
+    }).join("");
+    const opts = smithOptions(item);
+    const smith = opts.length ? `<div class="smith"><label for="smith-select">The Smith adds one mod of your choice</label>
+        <div class="smith-row"><select id="smith-select">${opts.map((o) => `<option value="${o.family}">${esc(MODS[o.family].name)} (${MODS[o.family].type}, T${o.tier}) \xB7 ${o.cost} Scrap</option>`).join("")}</select>
+        <button data-action="smith" data-uid="${item.uid}">Craft</button></div>
+        <div class="muted small">You have ${fmt2(state2.scrap)} Scrap.${item.rarity === "normal" ? " A Normal item becomes Magic." : ""}</div></div>` : `<div class="smith muted small">The Smith can't add anything here: no open mod slots. Ash resets the item to Normal.</div>`;
+    return `<div class="craft"><h4>Crafting</h4><div class="cur-grid">${buttons}</div>${smith}</div>`;
+  }
+  function renderGear(state2, ui2) {
+    const sel = ui2.selectedUid != null ? findItem(state2, ui2.selectedUid) : null;
+    const equipped = SLOTS.map((slot) => {
+      const it = state2.character.equipment[slot];
+      return `<button class="slot ${sel && sel.item === it ? "selected" : ""}" data-action="select" data-uid="${it ? it.uid : ""}" ${it ? "" : "disabled"}>
+      <span class="slot-name">${SLOT_NAMES[slot]}</span>
+      ${it ? `<span class="slot-item r-${it.rarity}">${esc(itemTitle(it))}</span><span class="muted small">${esc(BASES[it.baseId].name)} \xB7 ${it.mods.length} mod${it.mods.length === 1 ? "" : "s"}</span>` : '<span class="muted">Empty</span>'}
+    </button>`;
+    }).join("");
+    const conv = CONVERSIONS.map((c, i) => `<button class="small-btn" data-action="convert" data-idx="${i}" ${(state2.currency[c.from] || 0) < c.amount ? "disabled" : ""}>${c.amount} ${CURRENCY[c.from].name} \u2192 1 ${CURRENCY[c.to].name}</button>`).join("");
+    const wallet = `<div class="wallet">${CURRENCY_ORDER.map((c) => `<span class="coin"><b>${state2.currency[c]}</b> ${CURRENCY[c].name}</span>`).join("")}<span class="coin scrap"><b>${fmt2(state2.scrap)}</b> Scrap</span></div><div class="conv">${conv}</div>`;
+    const filter = ui2.filter || "all";
+    const list = state2.inventory.filter((it) => filter === "all" || BASES[it.baseId].slot === filter).slice().reverse();
+    const filters = ["all", ...SLOTS].map((f) => `<button class="tab-chip ${filter === f ? "on" : ""}" data-action="filter" data-filter="${f}" aria-pressed="${filter === f}">${f === "all" ? "All" : SLOT_NAMES[f]}</button>`).join("");
+    const rows = list.length ? list.map((it) => `<button class="inv-row ${sel && sel.item === it ? "selected" : ""}" data-action="select" data-uid="${it.uid}">
+        <span class="r-${it.rarity} inv-name">${esc(itemTitle(it))}${it.locked ? ' <span class="lock">locked</span>' : ""}</span>
+        <span class="muted small">${esc(BASES[it.baseId].name)} \xB7 ilvl ${it.ilvl}</span>
+        <span class="inv-mods small">${it.mods.map((m) => esc(modText(m))).join(" \xB7 ") || '<span class="muted">no mods</span>'}</span></button>`).join("") : '<p class="muted small empty">No items here yet. Items drop from monsters and are picked up when a pack dies.</p>';
+    let detail = '<p class="muted">Select an item to inspect, compare and craft it. You can craft on equipped items too.</p>';
+    if (sel) {
+      const item = sel.item;
+      const isEq = sel.where !== "inventory";
+      const actions = isEq ? `<button data-action="unequip" data-slot="${sel.where}">Unequip</button>` : `<button class="primary" data-action="equip" data-uid="${item.uid}">Equip</button>
+         <button data-action="salvage" data-uid="${item.uid}">Salvage (+${salvageValue(item)} Scrap)</button>`;
+      const compare = isEq ? "" : compareRows(getStats(state2), statsWithItem(state2, item), state2.zoneId);
+      detail = `${itemCard(item, { equippedIn: isEq ? sel.where : null })}
+      <div class="actions">${actions}<button data-action="lock" data-uid="${item.uid}">${item.locked ? "Unlock" : "Lock"}</button></div>
+      ${compare}${craftPanel(state2, item)}`;
+    }
+    return `<div class="gear-grid">
+    <section class="gear-left">
+      <h3>Equipped</h3><div class="slots">${equipped}</div>
+      <h3>Currency</h3>${wallet}
+      <h3>Inventory <span class="muted small">${state2.inventory.length} / ${RULES.inventorySize}</span></h3>
+      <div class="inv-tools"><div class="filters">${filters}</div>
+        <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button></div></div>
+      <div class="inv">${rows}</div>
+    </section>
+    <section class="gear-right" aria-live="polite">${ui2.message ? `<div class="toast ${ui2.messageKind || ""}">${esc(ui2.message)}</div>` : ""}${detail}</section>
+  </div>`;
+  }
+  function renderSheet(state2) {
+    const s = getStats(state2);
+    const d = s.damage;
+    const src = (key, unit = "") => {
+      const list = s.sources[key];
+      if (!list || !list.length) return '<li class="muted">No sources.</li>';
+      return list.map((m) => `<li><span>${esc(m.source)}</span><b>${m.kind === "increased" ? `${m.value}% increased` : m.kind === "more" ? `${m.value}% more` : `${key === "addedPhys" ? `${m.value}\u2013${m.value * 2}` : `+${m.value}`}${unit}`}</b></li>`).join("");
+    };
+    const row = (label, value, key, unit) => `<details><summary><span>${label}</span><b>${value}</b></summary><ul class="sources">${src(key, unit)}</ul></details>`;
+    return `<div class="sheet-grid">
+    <section>
+      <h3>How your damage is built</h3>
+      <p class="muted small">Increased bonuses add together, then apply once. More multipliers each multiply separately, which makes them stronger as you stack them.</p>
+      <table class="formula"><tbody>
+        <tr><td>Base damage (weapon + added)</td><td>${fmt2(d.baseMin)}\u2013${fmt2(d.baseMax)}</td></tr>
+        <tr><td>\xD7 (1 + increased)</td><td>\xD7 ${(1 + d.increased / 100).toFixed(2)} <span class="muted">(${d.increased}% total)</span></td></tr>
+        <tr><td>\xD7 more multipliers</td><td>\xD7 ${d.moreMult.toFixed(2)} <span class="muted">(${s.skill.name} 20% more)</span></td></tr>
+        <tr><td>= Damage per hit</td><td>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)} <span class="muted">avg ${fmt1(d.avgHit)}</span></td></tr>
+        <tr><td>\xD7 attacks per second</td><td>\xD7 ${d.aps.toFixed(2)} <span class="muted">(weapon ${d.weaponAps.toFixed(2)})</span></td></tr>
+        <tr><td>\xD7 crit factor</td><td>\xD7 ${d.critFactor.toFixed(3)} <span class="muted">(${fmt1(d.critChance)}% \xD7 ${Math.round(d.critMulti * 100)}%)</span></td></tr>
+        <tr class="total"><td>= Damage per second (one target)</td><td>${fmt2(d.dps)}</td></tr>
+        <tr><td>Targets per use</td><td>${d.targets}</td></tr>
+      </tbody></table>
+      <h3>Offence sources</h3>
+      ${row("Increased physical damage", `${d.increased}%`, "physical")}
+      ${row("Added physical damage", `${d.added}\u2013${d.added * 2}`, "addedPhys")}
+      ${row("Increased attack speed", `${s.sources.attackSpeed.reduce((a, m) => a + m.value, 0)}%`, "attackSpeed")}
+      ${row("Increased crit chance", `${s.sources.critChance.reduce((a, m) => a + m.value, 0)}%`, "critChance")}
+      ${row("Crit multiplier", `${Math.round(d.critMulti * 100)}%`, "critMulti", "%")}
+    </section>
+    <section>
+      <h3>Defence sources</h3>
+      <p class="muted small">Tap a stat to see where it comes from.</p>
+      ${row("Maximum life", fmt2(s.life), "life")}
+      ${row("Maximum mana", fmt2(s.mana), "mana")}
+      ${row("Armour", fmt2(s.armour), "armour")}
+      ${row("Evasion", fmt2(s.evasion), "evasion")}
+      ${row("Fire resistance", `${s.res.fire}%`, "fireRes", "%")}
+      ${row("Cold resistance", `${s.res.cold}%`, "coldRes", "%")}
+      ${row("Lightning resistance", `${s.res.lightning}%`, "lightningRes", "%")}
+      ${row("Life regeneration", `${fmt1(s.lifeRegen)}/s`, "lifeRegen", "/s")}
+      <h3>Rules</h3>
+      <ul class="rules small">
+        <li>Armour reduces a physical hit by Armour \xF7 (Armour + 5 \xD7 hit), up to 90%. Strong against small hits, weak against big ones.</li>
+        <li>Evasion avoids physical attacks entirely: Evasion \xF7 (Evasion + 100 + 10 \xD7 monster level), up to 75%.</li>
+        <li>Resistances reduce elemental damage, capped at 75%.</li>
+        <li>Dying ends the run, loses loot from the current pack and 10% of a level's XP. You never lose a level.</li>
+      </ul>
+    </section>
+  </div>`;
+  }
+
+  // src/ui/main.js
+  var SAVE_KEY = "wallbreaker.save";
+  var UI_KEY = "wallbreaker.ui";
+  var TICK_MS = 100;
+  var MAX_CATCHUP_MS = 6e4;
+  var state;
+  var ui = { selectedUid: null, filter: "all", tab: "gear", speed: 1, message: "", messageKind: "", messageAt: 0, version: 0, confirmReset: false };
+  var $ = (id) => document.getElementById(id);
+  function storageGet(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  function storageSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  function save() {
+    if (!state) return;
+    if (storageSet(SAVE_KEY, serialize(state))) {
+      $("save-status").textContent = "Saved";
+    } else {
+      $("save-status").textContent = "Progress isn\u2019t being saved in this browser";
+    }
+    storageSet(UI_KEY, JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter }));
+  }
+  function notify(text, kind = "") {
+    ui.message = text;
+    ui.messageKind = kind;
+    ui.messageAt = performance.now();
+    bump();
+  }
+  function bump() {
+    ui.version++;
+  }
+  var cache = {};
+  function put(id, html) {
+    if (cache[id] === html) return;
+    cache[id] = html;
+    $(id).innerHTML = html;
+  }
+  var lowerSig = "";
+  function render(force = false) {
+    put("zones", renderZones(state));
+    put("vitals", renderVitals(state));
+    put("run", renderRun(state));
+    put("log", renderLog(state));
+    put("diagnosis", renderDiagnosis(state));
+    $("auto-advance").checked = state.autoAdvance;
+    for (const b of document.querySelectorAll("[data-speed]")) b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === ui.speed));
+    for (const b of document.querySelectorAll("[data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === ui.tab));
+    for (const p of document.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== ui.tab;
+    const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(",")}|${state.character.level}|${state.zoneId}`;
+    if (!force && sig === lowerSig) return;
+    lowerSig = sig;
+    if (ui.tab === "gear") {
+      const sel = $("smith-select");
+      const keepSmith = sel ? sel.value : null;
+      const inv = document.querySelector(".inv");
+      const scroll = inv ? inv.scrollTop : 0;
+      put("gear", renderGear(state, ui));
+      const sel2 = $("smith-select");
+      if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
+      const inv2 = document.querySelector(".inv");
+      if (inv2) inv2.scrollTop = scroll;
+    } else if (ui.tab === "sheet") {
+      put("sheet", renderSheet(state));
+    }
+    $("reset-confirm").hidden = !ui.confirmReset;
+  }
+  var last = performance.now();
+  var acc = 0;
+  function loop() {
+    const now = performance.now();
+    const elapsed = Math.min(now - last, MAX_CATCHUP_MS);
+    last = now;
+    if (ui.speed > 0) {
+      acc += elapsed * ui.speed;
+      const n = Math.floor(acc / TICK_MS);
+      acc -= n * TICK_MS;
+      if (n > 0) runTicks(state, n);
+    }
+    if (ui.message && now - ui.messageAt > 5e3) {
+      ui.message = "";
+      bump();
+    }
+    render();
+  }
+  function handle(action, el) {
+    const uid = el.dataset.uid ? Number(el.dataset.uid) : null;
+    let res;
+    switch (action) {
+      case "zone":
+        res = selectZone(state, Number(el.dataset.zone));
+        break;
+      case "speed":
+        ui.speed = Number(el.dataset.speed);
+        break;
+      case "tab":
+        ui.tab = el.dataset.tab;
+        break;
+      case "select":
+        ui.selectedUid = uid;
+        ui.message = "";
+        break;
+      case "filter":
+        ui.filter = el.dataset.filter;
+        break;
+      case "equip":
+        res = equip(state, uid);
+        if (res.ok) notify("Equipped.", "good");
+        break;
+      case "unequip":
+        res = unequip(state, el.dataset.slot);
+        if (res.ok) notify("Moved to inventory.");
+        break;
+      case "salvage":
+        res = salvage(state, uid);
+        if (res.ok) {
+          ui.selectedUid = null;
+          notify(`Salvaged for ${res.scrap} Scrap.`, "good");
+        }
+        break;
+      case "salvage-all": {
+        res = salvageAll(state, el.dataset.rarity);
+        if (ui.selectedUid != null && !findItem(state, ui.selectedUid)) ui.selectedUid = null;
+        notify(res.count ? `Salvaged ${res.count} items for ${res.scrap} Scrap.` : "Nothing to salvage. Locked items are skipped.");
+        break;
+      }
+      case "lock":
+        res = toggleLock(state, uid);
+        break;
+      case "craft": {
+        const cur = el.dataset.cur;
+        res = craftItem(state, cur, uid);
+        if (res.ok) notify(`Used ${CURRENCY[cur].name}.`, "good");
+        break;
+      }
+      case "smith": {
+        const fam = $("smith-select").value;
+        res = smithItem(state, uid, fam);
+        if (res.ok) notify(`The Smith added the mod for ${res.cost} Scrap.`, "good");
+        break;
+      }
+      case "convert":
+        res = convertCurrency(state, Number(el.dataset.idx));
+        if (res.ok) notify("Converted.", "good");
+        break;
+      case "reset-ask":
+        ui.confirmReset = true;
+        break;
+      case "reset-cancel":
+        ui.confirmReset = false;
+        break;
+      case "reset-confirm":
+        ui.confirmReset = false;
+        state = newGame();
+        ui.selectedUid = null;
+        save();
+        notify("Started a new character.");
+        break;
+      default:
+        return;
+    }
+    if (res && !res.ok && res.reason) notify(res.reason, "neg");
+    bump();
+    render(true);
+  }
+  function wire() {
+    document.addEventListener("click", (e) => {
+      const el = e.target.closest("[data-action]");
+      if (!el || el.disabled) return;
+      handle(el.dataset.action, el);
+    });
+    $("auto-advance").addEventListener("change", (e) => {
+      setAutoAdvance(state, e.target.checked);
+      if (e.target.checked && state.zoneId !== state.progress.unlocked) selectZone(state, state.progress.unlocked);
+      bump();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) save();
+    });
+    window.addEventListener("pagehide", save);
+    setInterval(save, 3e4);
+  }
+  function boot(data) {
+    let notice = "";
+    const text = data && data.save || storageGet(SAVE_KEY);
+    if (text) {
+      try {
+        state = deserialize(text);
+      } catch {
+        notice = "Your saved game could not be read, so a new character was started.";
+      }
+    }
+    if (!state) state = newGame();
+    try {
+      const u = JSON.parse(data && data.ui || storageGet(UI_KEY) || "{}");
+      if (u.tab) ui.tab = u.tab;
+      if (typeof u.speed === "number") ui.speed = u.speed;
+      if (u.filter) ui.filter = u.filter;
+    } catch {
+    }
+    wire();
+    if (notice) notify(notice, "neg");
+    render(true);
+    last = performance.now();
+    setInterval(loop, TICK_MS);
+    window.claude?.hot?.snapshot?.(() => ({ save: serialize(state), ui: JSON.stringify({ tab: ui.tab, speed: ui.speed, filter: ui.filter }) }));
+  }
+  var hot = window.claude?.hot;
+  if (hot?.ready) hot.ready(boot);
+  else boot(hot?.data ?? null);
+})();
+</script>
+
+</body></html>
