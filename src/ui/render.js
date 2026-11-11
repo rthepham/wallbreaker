@@ -5,13 +5,18 @@ import { THREATS } from '../data/monsters.js';
 import { BASES, MODS, SLOTS, SLOT_NAMES } from '../data/items.js';
 import { CURRENCY, CURRENCY_ORDER, CONVERSIONS } from '../data/currency.js';
 import { RULES } from '../data/player.js';
-import { getStats, getZone, xpToNext, statsWithItem, findItem } from '../game.js';
+import {
+  getStats, getZone, xpToNext, statsWithItem, findItem, supportSlots, statsWithSkill,
+  passivePoints, passivesSpent, canAllocate, canRefund, refundCost, statsWithPassives,
+} from '../game.js';
+import { PASSIVES, PASSIVE_REGIONS } from '../data/passives.js';
+import { SKILLS, SKILL_ORDER, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from '../data/skills.js';
 import { maxHitTaken, effectiveRes, DAMAGE_TYPES } from '../stats.js';
 import { monsterBaseLife } from '../combat.js';
 import { canCraft, smithOptions, salvageValue } from '../crafting.js';
 import { diagnose } from '../diagnosis.js';
 import {
-  fmt, fmt1, pct, cap, esc, modText, baseLine, itemTitle, timeAgo,
+  fmt, fmt1, pct, cap, esc, modText, baseLine, itemTitle, timeAgo, statModText,
 } from './format.js';
 
 const dt = (type) => `<span class="dt dt-${type}">${type}</span>`;
@@ -70,13 +75,15 @@ export function renderVitals(state) {
     ${bar('xp', ch.xp, need, '')}
     ${bar('life', Math.max(0, p.life), s.life, `Life ${fmt(Math.max(0, p.life))} / ${fmt(s.life)}`)}
     ${bar('mana', p.mana, s.mana, `Mana ${fmt(p.mana)} / ${fmt(s.mana)}`)}
-    <h3>Offence <span class="muted small">${s.skill.name}</span></h3>
+    <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? 's' : ''}` : ''}</span></h3>
     <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
     <div class="kv"><span>Hit</span><b>${fmt(d.hitMin)}–${fmt(d.hitMax)}</b></div>
     <div class="kv"><span>Attacks per second</span><b>${d.aps.toFixed(2)}</b></div>
-    <div class="kv"><span>Targets per use</span><b>${d.targets}</b></div>
+    <div class="kv"><span>Targets per use</span><b>${d.targets}${d.splash ? ` <span class="muted">+${d.splash} splash</span>` : ''}</b></div>
     <div class="kv"><span>Crit chance / multiplier</span><b>${fmt1(d.critChance)}% / ${Math.round(d.critMulti * 100)}%</b></div>
-    <div class="kv"><span>Mana per second</span><b>${fmt1(d.manaPerSecond)} <span class="muted">(regen ${fmt1(s.manaRegen)})</span></b></div>
+    ${d.lifeCost
+      ? `<div class="kv"><span>Life per use</span><b>${fmt1(d.manaCost)}</b></div>`
+      : `<div class="kv"><span>Mana per second</span><b class="${d.manaPerSecond > s.manaRegen ? 'low' : ''}">${fmt1(d.manaPerSecond)} <span class="muted">(regen ${fmt1(s.manaRegen)})</span></b></div>`}
     <h3>Defence</h3>
     <div class="kv"><span>Armour</span><b>${fmt(s.armour)}</b></div>
     <div class="kv"><span>Evasion</span><b>${fmt(s.evasion)}</b></div>
@@ -164,12 +171,15 @@ function itemCard(item, { equippedIn = null } = {}) {
   </div>`;
 }
 
-function compareRows(cur, alt, zoneId) {
+function compareRows(cur, alt, zoneId, heading = 'If equipped') {
   const mhA = maxHitTaken(cur, zoneId);
   const mhB = maxHitTaken(alt, zoneId);
   const rows = [
     ['Damage per second', cur.damage.dps, alt.damage.dps],
     ['Targets per use', cur.damage.targets, alt.damage.targets],
+    ['Crit chance', cur.damage.critChance, alt.damage.critChance, '%'],
+    ['Uses per second', cur.damage.aps, alt.damage.aps, '', 2],
+    ['Mana regen /s', cur.manaRegen, alt.manaRegen, '', 1],
     ['Life', cur.life, alt.life],
     ['Mana', cur.mana, alt.mana],
     ['Armour', cur.armour, alt.armour],
@@ -183,11 +193,12 @@ function compareRows(cur, alt, zoneId) {
     ['Max cold hit', mhA.cold, mhB.cold],
     ['Max lightning hit', mhA.lightning, mhB.lightning],
   ];
-  const out = rows.filter(([, a, b]) => Math.abs(a - b) >= 0.5).map(([label, a, b, unit = '']) => {
+  const show = (v, dec) => (dec ? v.toFixed(dec) : fmt(v));
+  const out = rows.filter(([, a, b, , dec = 0]) => Math.abs(a - b) >= 0.5 / 10 ** dec).map(([label, a, b, unit = '', dec = 0]) => {
     const diff = b - a;
-    return `<tr><td>${label}</td><td>${fmt(a)}${unit}</td><td>${fmt(b)}${unit}</td><td class="${diff > 0 ? 'good' : 'neg'}">${diff > 0 ? '+' : '−'}${fmt(Math.abs(diff))}${unit}</td></tr>`;
+    return `<tr><td>${label}</td><td>${show(a, dec)}${unit}</td><td>${show(b, dec)}${unit}</td><td class="${diff > 0 ? 'good' : 'neg'}">${diff > 0 ? '+' : '−'}${show(Math.abs(diff), dec)}${unit}</td></tr>`;
   });
-  return out.length ? `<table class="compare"><thead><tr><th>If equipped</th><th>Now</th><th>After</th><th>Change</th></tr></thead><tbody>${out.join('')}</tbody></table>` : '<p class="muted small">Equipping this changes nothing.</p>';
+  return out.length ? `<div class="table-wrap"><table class="compare"><thead><tr><th>${heading}</th><th>Now</th><th>After</th><th>Change</th></tr></thead><tbody>${out.join('')}</tbody></table></div>` : '<p class="muted small">This changes none of your main numbers.</p>';
 }
 
 function craftPanel(state, item) {
@@ -252,7 +263,7 @@ export function renderGear(state, ui) {
         <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button></div></div>
       <div class="inv">${rows}</div>
     </section>
-    <section class="gear-right" aria-live="polite">${ui.message ? `<div class="toast ${ui.messageKind || ''}">${esc(ui.message)}</div>` : ''}${detail}</section>
+    <section class="gear-right">${detail}</section>
   </div>`;
 }
 
@@ -271,18 +282,26 @@ export function renderSheet(state) {
     <section>
       <h3>How your damage is built</h3>
       <p class="muted small">Increased bonuses add together, then apply once. More multipliers each multiply separately, which makes them stronger as you stack them.</p>
+      ${d.parts.map((p) => `<table class="formula"><tbody>
+        <tr><td colspan="2"><b>${dt(p.type)} damage</b>${p.convertedFrom ? ` <span class="muted small">(converted from ${p.convertedFrom})</span>` : ''}</td></tr>
+        <tr><td>Base${s.skill.kind === 'attack' ? ' (weapon + added)' : ` (${s.skill.name} at level ${s.level})`}</td><td>${fmt1(p.baseMin)}–${fmt1(p.baseMax)}</td></tr>
+        <tr><td>× (1 + increased)</td><td>× ${(1 + p.increased / 100).toFixed(2)} <span class="muted">(${p.increased}% total)</span></td></tr>
+        <tr><td>× more multipliers</td><td>× ${p.more.toFixed(2)}</td></tr>
+        <tr><td>= Damage per hit</td><td>${fmt(p.hitMin)}–${fmt(p.hitMax)}</td></tr>
+      </tbody></table>`).join('')}
       <table class="formula"><tbody>
-        <tr><td>Base damage (weapon + added)</td><td>${fmt(d.baseMin)}–${fmt(d.baseMax)}</td></tr>
-        <tr><td>× (1 + increased)</td><td>× ${(1 + d.increased / 100).toFixed(2)} <span class="muted">(${d.increased}% total)</span></td></tr>
-        <tr><td>× more multipliers</td><td>× ${d.moreMult.toFixed(2)} <span class="muted">(${s.skill.name} 20% more)</span></td></tr>
-        <tr><td>= Damage per hit</td><td>${fmt(d.hitMin)}–${fmt(d.hitMax)} <span class="muted">avg ${fmt1(d.avgHit)}</span></td></tr>
-        <tr><td>× attacks per second</td><td>× ${d.aps.toFixed(2)} <span class="muted">(weapon ${d.weaponAps.toFixed(2)})</span></td></tr>
+        <tr><td>Total damage per hit</td><td>${fmt(d.hitMin)}–${fmt(d.hitMax)} <span class="muted">avg ${fmt1(d.avgHit)}</span></td></tr>
+        <tr><td>× uses per second</td><td>× ${d.aps.toFixed(2)} <span class="muted">(base ${d.speedBase.toFixed(2)}, +${d.speedInc}%)</span></td></tr>
         <tr><td>× crit factor</td><td>× ${d.critFactor.toFixed(3)} <span class="muted">(${fmt1(d.critChance)}% × ${Math.round(d.critMulti * 100)}%)</span></td></tr>
         <tr class="total"><td>= Damage per second (one target)</td><td>${fmt(d.dps)}</td></tr>
-        <tr><td>Targets per use</td><td>${d.targets}</td></tr>
+        <tr><td>Targets per use</td><td>${d.targets}${d.splash ? ` + ${d.splash} splash at ${Math.round(d.splashMult * 100)}%` : ''}</td></tr>
       </tbody></table>
       <h3>Offence sources</h3>
-      ${row('Increased physical damage', `${d.increased}%`, 'physical')}
+      ${row('Increased damage (all)', `${s.sources.damage.filter((m) => m.kind === 'increased').reduce((a, m) => a + m.value, 0)}%`, 'damage')}
+      ${row('Increased physical damage', `${s.sources.physical.reduce((a, m) => a + m.value, 0)}%`, 'physical')}
+      ${row('Increased spell damage', `${s.sources.spell.reduce((a, m) => a + m.value, 0)}%`, 'spell')}
+      ${row('Increased elemental damage', `${s.sources.elemental.reduce((a, m) => a + m.value, 0)}%`, 'elemental')}
+      ${row('Increased cast speed', `${s.sources.castSpeed.reduce((a, m) => a + m.value, 0)}%`, 'castSpeed')}
       ${row('Added physical damage', `${d.added}–${d.added * 2}`, 'addedPhys')}
       ${row('Increased attack speed', `${s.sources.attackSpeed.reduce((a, m) => a + m.value, 0)}%`, 'attackSpeed')}
       ${row('Increased crit chance', `${s.sources.critChance.reduce((a, m) => a + m.value, 0)}%`, 'critChance')}
@@ -307,5 +326,188 @@ export function renderSheet(state) {
         <li>Dying ends the run, loses loot from the current pack and 10% of a level's XP. You never lose a level.</li>
       </ul>
     </section>
+  </div>`;
+}
+
+// ---------- Skills & supports ----------
+
+function skillSummary(st) {
+  const d = st.damage;
+  return `<div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
+    <div class="kv"><span>Targets</span><b>${d.targets}${d.splash ? ` +${d.splash} splash` : ''}</b></div>
+    <div class="kv"><span>${d.lifeCost ? 'Life' : 'Mana'} per use</span><b>${fmt1(d.manaCost)}</b></div>`;
+}
+
+export function renderSkills(state) {
+  const cur = getStats(state);
+  const sk = state.character.skill;
+  const slots = supportSlots(state);
+
+  const cards = SKILL_ORDER.map((id) => {
+    const S = SKILLS[id];
+    const on = sk.id === id;
+    const preview = on ? cur : statsWithSkill(state, { id, supports: sk.supports.filter((x) => supportFits(x, id)) });
+    return `<button class="skill-card ${on ? 'selected' : ''}" data-action="skill" data-skill="${id}" aria-pressed="${on}">
+      <span class="skill-name"><span class="dot dot-${S.damageType}"></span>${S.name}${on ? ' <span class="muted small">equipped</span>' : ''}</span>
+      <span class="muted small">${S.tags.join(' · ')}</span>
+      <span class="small">${esc(S.description)}</span>
+      <span class="skill-stats">${skillSummary(preview)}</span>
+    </button>`;
+  }).join('');
+
+  const linkRows = [];
+  for (let i = 0; i < LINKS.unlocks[LINKS.unlocks.length - 1].slots - 1; i++) {
+    if (i >= slots) {
+      const u = LINKS.unlocks.find((x) => x.slots - 1 > i);
+      linkRows.push(`<div class="link locked"><span class="link-num">${i + 1}</span><span class="muted">Locked · opens on first clear of zone ${u.zone}</span></div>`);
+      continue;
+    }
+    const curId = sk.supports[i] || '';
+    const options = state.ownedSupports
+      .filter((id) => supportFits(id, sk.id) && (id === curId || !sk.supports.includes(id)))
+      .map((id) => `<option value="${id}" ${id === curId ? 'selected' : ''}>${esc(SUPPORTS[id].name)}: ${esc(SUPPORTS[id].text)} (mana ×${SUPPORTS[id].manaMult})</option>`).join('');
+    const disabled = i > sk.supports.length;
+    linkRows.push(`<div class="link"><span class="link-num">${i + 1}</span>
+      <select id="link-${i}" data-change="support" data-slot="${i}" ${disabled ? 'disabled' : ''} aria-label="Support slot ${i + 1}">
+        <option value="">${disabled ? 'Fill the slot above first' : 'Empty'}</option>${options}</select></div>`);
+  }
+
+  const d = cur.damage;
+  const manaWarn = !d.lifeCost && d.manaPerSecond > cur.manaRegen
+    ? `<p class="warn small">Your skill uses ${fmt1(d.manaPerSecond)} mana per second but you only regenerate ${fmt1(cur.manaRegen)}. You will run dry in long fights.</p>` : '';
+
+  const free = sk.supports.length < slots;
+  const owned = SUPPORT_ORDER.map((id) => {
+    const S = SUPPORTS[id];
+    const have = state.ownedSupports.includes(id);
+    const fits = supportFits(id, sk.id);
+    const linked = sk.supports.includes(id);
+    let note = '';
+    if (!have) note = '<span class="muted">Not found yet</span>';
+    else if (!fits) note = `<span class="muted">Needs a ${S.requires.join(' or ')} skill</span>`;
+    else if (linked) note = '<span class="good">Linked</span>';
+    else if (free) {
+      const alt = statsWithSkill(state, { id: sk.id, supports: [...sk.supports, id] }).damage;
+      const dd = alt.dps - d.dps;
+      note = `If added: ${fmt(d.dps)} → <b>${fmt(alt.dps)}</b> DPS <span class="${dd >= 0 ? 'good' : 'neg'}">(${dd >= 0 ? '+' : '−'}${fmt(Math.abs(dd))})</span>${alt.targets !== d.targets ? `, ${alt.targets} targets` : ''}, ${fmt1(alt.manaCost)} mana per use`;
+    } else note = '<span class="muted">No free link slot</span>';
+    return `<li class="${have ? '' : 'unowned'}"><b>${S.name}</b> <span class="small">${esc(S.text)} · mana ×${S.manaMult}${S.requires ? ` · ${S.requires.join('/')} only` : ''}</span><div class="small">${note}</div></li>`;
+  }).join('');
+
+  return `<div class="skills-grid">
+    <section>
+      <h3>Active skill</h3>
+      <div class="skill-cards">${cards}</div>
+    </section>
+    <section>
+      <h3>Linked supports <span class="muted small">${sk.supports.length} / ${slots}</span></h3>
+      <div class="links">${linkRows.join('')}</div>
+      <div class="link-total">
+        <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
+        <div class="kv"><span>Uses per second</span><b>${d.aps.toFixed(2)}</b></div>
+        <div class="kv"><span>Targets</span><b>${d.targets}${d.splash ? ` +${d.splash} splash` : ''}</b></div>
+        <div class="kv"><span>${d.lifeCost ? 'Life' : 'Mana'} per use</span><b>${fmt1(d.manaCost)} <span class="muted">(base ${SKILLS[sk.id].manaCost} × ${d.manaMult.toFixed(2)})</span></b></div>
+        ${d.lifeCost ? '' : `<div class="kv"><span>Mana per second / regen</span><b>${fmt1(d.manaPerSecond)} / ${fmt1(cur.manaRegen)}</b></div>`}
+      </div>
+      ${manaWarn}
+      <p class="muted small">Each support multiplies the skill's mana cost. "More" bonuses from supports multiply each other, so two 40% more supports give 96% more, not 80%.</p>
+      <h3>Support gems</h3>
+      <ul class="support-list">${owned}</ul>
+      <p class="muted small">Every zone's first clear gives a new support. Repeat boss kills have a ${Math.round(LINKS.bossDropChance * 100)}% chance.</p>
+    </section>
+  </div>`;
+}
+
+// ---------- Passive tree ----------
+
+const SCALE = 46;
+
+export function nodeLines(node) {
+  return node.text ? node.text : node.mods.map(statModText);
+}
+
+// Small nodes are named after what they give.
+export function nodeName(node) {
+  return node.type === 'small' ? nodeLines(node).join(', ') : node.name;
+}
+
+export function renderTree(state, ui) {
+  const have = new Set(state.character.passives);
+  const points = passivePoints(state);
+  const spent = passivesSpent(state);
+  const free = points - spent;
+  const xs = Object.values(PASSIVES).map((n) => n.x);
+  const ys = Object.values(PASSIVES).map((n) => n.y);
+  const pad = 1.6;
+  const minX = (Math.min(...xs) - pad) * SCALE;
+  const minY = (Math.min(...ys) - pad) * SCALE;
+  const w = (Math.max(...xs) - Math.min(...xs) + pad * 2) * SCALE;
+  const h = (Math.max(...ys) - Math.min(...ys) + pad * 2) * SCALE;
+
+  const edges = [];
+  const drawn = new Set();
+  for (const n of Object.values(PASSIVES)) {
+    for (const m of n.links) {
+      const key = [n.id, m].sort().join('|');
+      if (drawn.has(key)) continue;
+      drawn.add(key);
+      const o = PASSIVES[m];
+      const on = have.has(n.id) && have.has(m);
+      edges.push(`<line x1="${n.x * SCALE}" y1="${n.y * SCALE}" x2="${o.x * SCALE}" y2="${o.y * SCALE}" class="edge ${on ? 'on' : ''}"/>`);
+    }
+  }
+  const R = { origin: 10, small: 7, notable: 11, keystone: 15 };
+  const nodes = Object.values(PASSIVES).map((n) => {
+    const on = have.has(n.id);
+    const reachable = !on && n.links.some((l) => have.has(l));
+    const cls = `node t-${n.type} ${on ? 'on' : reachable ? (free > 0 ? 'open' : 'near') : ''} ${ui.selectedNode === n.id ? 'sel' : ''}`;
+    const cx = n.x * SCALE;
+    const cy = n.y * SCALE;
+    const shape = n.type === 'keystone'
+      ? `<rect x="${cx - R.keystone}" y="${cy - R.keystone}" width="${R.keystone * 2}" height="${R.keystone * 2}" rx="3" transform="rotate(45 ${cx} ${cy})"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="${R[n.type]}"/>`;
+    const label = n.type === 'keystone' || n.type === 'notable'
+      ? `<text x="${cx}" y="${cy + R[n.type] + 15}" class="nlabel ${n.type}">${esc(n.name)}</text>` : '';
+    const title = n.type === 'small' ? nodeName(n) : `${n.name}: ${nodeLines(n).join('; ')}`;
+    return `<g class="${cls}" data-action="node" data-node="${n.id}" tabindex="0" role="button" aria-label="${esc(title)}" aria-pressed="${ui.selectedNode === n.id}"><title>${esc(title)}</title>${shape}${label}</g>`;
+  }).join('');
+  const regionLabels = PASSIVE_REGIONS.map((r) => {
+    const a = (r.angle * Math.PI) / 180;
+    return `<text x="${Math.cos(a) * 6.0 * SCALE}" y="${Math.sin(a) * 6.0 * SCALE + 6}" class="rlabel">${r.name}</text>`;
+  }).join('');
+
+  let detail = `<p class="muted">Click a node to see what it does and how it would change your character.</p>
+    <ul class="small tree-help">
+      <li>You get 1 point per level${state.progress.cleared.includes(5) ? '' : ', plus 2 for first clearing zone 5'}.</li>
+      <li>A node can be taken once it touches one you already have.</li>
+      <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
+      <li>Refunding a node costs ${refundCost(state)} Scrap at your level.</li>
+    </ul>`;
+  const sel = ui.selectedNode && PASSIVES[ui.selectedNode];
+  if (sel) {
+    const on = have.has(sel.id);
+    const cur = getStats(state);
+    const alt = statsWithPassives(state, on ? state.character.passives.filter((x) => x !== sel.id) : [...state.character.passives, sel.id]);
+    const reason = on ? canRefund(state, sel.id) : canAllocate(state, sel.id);
+    const typeName = { origin: 'Starting point', small: 'Passive', notable: 'Notable', keystone: 'Keystone' }[sel.type];
+    const btn = sel.type === 'origin' ? '' : on
+      ? `<button data-action="refund" data-node="${sel.id}" ${reason ? 'disabled' : ''}>Refund (${refundCost(state)} Scrap)</button>`
+      : `<button class="primary" data-action="allocate" data-node="${sel.id}" ${reason ? 'disabled' : ''}>Allocate (1 point)</button>`;
+    detail = `<div class="node-card t-${sel.type}">
+        <div class="muted small">${typeName}${sel.region ? ` · ${cap(sel.region)}` : ''}${on ? ' · <span class="good">allocated</span>' : ''}</div>
+        <div class="item-name">${esc(sel.type === 'small' ? 'Passive' : sel.name)}</div>
+        <ul class="mods">${nodeLines(sel).map((l) => `<li>${esc(l)}</li>`).join('') || '<li class="muted">Where every build begins.</li>'}</ul>
+      </div>
+      <div class="actions">${btn}</div>
+      ${reason && sel.type !== 'origin' ? `<p class="muted small">${esc(reason)}</p>` : ''}
+      ${sel.type === 'origin' ? '' : compareRows(cur, alt, state.zoneId, on ? 'If refunded' : 'If allocated')}`;
+  }
+
+  return `<div class="tree-grid">
+    <section class="tree-wrap">
+      <div class="tree-head"><b class="${free > 0 ? 'good' : ''}">${free} point${free === 1 ? '' : 's'} to spend</b><span class="muted small">${spent} of ${points} used · ${Object.keys(PASSIVES).length - 1} nodes in the tree</span></div>
+      <svg class="tree" viewBox="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join('')}${regionLabels}${nodes}</svg>
+    </section>
+    <section class="tree-detail">${detail}</section>
   </div>`;
 }

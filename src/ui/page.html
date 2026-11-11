@@ -227,8 +227,46 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .toast.good { border-color: #3d5a3b; color: var(--good); }
 .toast.neg { border-color: #7c3a32; color: #f0a59b; }
 
+.skills-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.skill-cards { display: grid; gap: 8px; }
+.skill-card { display: grid; gap: 4px; text-align: left; padding: 10px 12px; background: var(--panel); }
+.skill-card.selected { border-color: var(--brass); background: #2a2b2c; box-shadow: inset 3px 0 0 var(--brass); }
+.skill-name { display: flex; align-items: center; gap: 4px; font-family: var(--f-display); font-size: 1.1rem; }
+.skill-stats { display: grid; margin-top: 4px; font-size: 0.85rem; }
+.links { display: grid; gap: 6px; }
+.link { display: flex; gap: 8px; align-items: center; }
+.link select { flex: 1; min-width: 0; }
+.link.locked { padding: 7px 0; }
+.link-num { font-family: var(--f-mono); color: var(--brass); width: 1.4em; text-align: center; border: 1px solid var(--rule); border-radius: 3px; flex: none; }
+.link-total { margin: 10px 0; }
+.warn { color: var(--t-fire); border-left: 3px solid var(--t-fire); padding-left: 8px; }
+.support-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.support-list li { padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); }
+.support-list li.unowned { opacity: 0.55; }
+.count-badge:not(:empty) { display: inline-block; min-width: 1.5em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-family: var(--f-mono); font-size: 0.75rem; text-align: center; }
+.tree-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.tree-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.tree { width: 100%; height: auto; max-height: 72vh; display: block; background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); }
+.tree .edge { stroke: #343b4b; stroke-width: 3; }
+.tree .edge.on { stroke: var(--brass); }
+.tree .node { cursor: pointer; }
+.tree .node circle, .tree .node rect { fill: var(--panel-2); stroke: #4a5163; stroke-width: 2; }
+.tree .node.open circle, .tree .node.open rect { stroke: var(--brass); stroke-dasharray: 3 2; fill: #2a2a24; }
+.tree .node.near circle, .tree .node.near rect { stroke: #7d6f4c; }
+.tree .node.on circle, .tree .node.on rect { fill: var(--brass); stroke: #f0d895; }
+.tree .node.t-keystone rect { stroke-width: 2.5; }
+.tree .node.sel circle, .tree .node.sel rect { stroke: #ffffff; stroke-width: 3; stroke-dasharray: none; }
+.tree .node:focus { outline: none; }
+.tree .node:focus-visible circle, .tree .node:focus-visible rect { stroke: #ffffff; stroke-width: 3; }
+.tree .nlabel { fill: var(--muted); font-size: 12px; text-anchor: middle; font-family: var(--f-body); pointer-events: none; }
+.tree .nlabel.keystone { fill: var(--ink); font-family: var(--f-display); font-size: 14px; }
+.tree .rlabel { fill: var(--brass); font-family: var(--f-display); font-size: 17px; text-anchor: middle; opacity: 0.85; pointer-events: none; }
+.node-card { background: #0f1217; border: 1px solid var(--rule); border-radius: var(--radius); padding: 10px 12px; }
+.node-card.t-keystone { border-color: #7a6a2c; }
+.tree-help { padding-left: 18px; color: var(--muted); }
+.table-wrap { overflow-x: auto; }
 .sheet-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
-.formula { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.formula { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-bottom: 8px; }
 .formula td { padding: 3px 6px; border-bottom: 1px dotted #262b37; }
 .formula td:last-child { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 .formula tr.total td { color: var(--brass); font-weight: 600; border-bottom-color: var(--brass); }
@@ -255,7 +293,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   .zones { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 }
 @media (max-width: 760px) {
-  .board, .gear-grid, .sheet-grid { grid-template-columns: minmax(0, 1fr); }
+  .board, .gear-grid, .sheet-grid, .skills-grid, .tree-grid { grid-template-columns: minmax(0, 1fr); }
   .board .fight { order: -2; }
   .board .diag { order: -1; }
   .zones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -268,7 +306,7 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
 
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–5</span></div>
+    <div class="brand"><span class="wordmark">Wallbreaker</span><span class="muted small">Prototype · zones 1–5 · skills · passive tree</span></div>
     <div class="controls">
       <div class="speed" role="group" aria-label="Game speed">
         <button data-action="speed" data-speed="0" aria-pressed="false">Pause</button>
@@ -292,14 +330,26 @@ summary b { font-family: var(--f-mono); font-weight: 500; }
   <section class="panel lower">
     <div class="tabs" role="tablist">
       <button role="tab" data-action="tab" data-tab="gear" aria-selected="true">Gear &amp; crafting</button>
+      <button role="tab" data-action="tab" data-tab="skills" aria-selected="false">Skills</button>
+      <button role="tab" data-action="tab" data-tab="tree" aria-selected="false">Passive tree <span id="tree-count" class="count-badge"></span></button>
       <button role="tab" data-action="tab" data-tab="sheet" aria-selected="false">Character sheet</button>
       <button role="tab" data-action="tab" data-tab="help" aria-selected="false">How to play</button>
     </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <div data-panel="gear" id="gear" role="tabpanel"></div>
+    <div data-panel="skills" id="skills" role="tabpanel" hidden></div>
+    <div data-panel="tree" id="tree" role="tabpanel" hidden></div>
     <div data-panel="sheet" id="sheet" role="tabpanel" hidden></div>
     <div data-panel="help" role="tabpanel" hidden>
       <div class="help">
-        <p>Your character fights on its own. You make it stronger by choosing and crafting its gear. Progress will stop at certain zones; the <b>Diagnosis</b> panel tells you why, and your job is to fix the build.</p>
+        <p>Your character fights on its own. You make it stronger through its <b>build</b>: its skill and supports, its passive tree, and its gear. Progress will stop at certain zones; the <b>Diagnosis</b> panel tells you why, and your job is to fix the build.</p>
+        <h3>Your build</h3>
+        <ul>
+          <li><b>Skills tab:</b> pick one active skill. Cleave uses your weapon. Fireball and Arc scale with your level and want spell damage gear.</li>
+          <li><b>Supports</b> link to your skill and change it: more damage, more targets, faster casts. Each one raises the mana cost. You start with 1 link slot; zones 3 and 5 open more. Each zone's first clear gives a new support.</li>
+          <li><b>Passive tree:</b> 1 point per level. Might is life, armour and physical damage. Finesse is speed, crits and evasion. Mind is mana, spells and resistances. Keystones (diamonds) change a rule of the game, with a real cost.</li>
+          <li><b>Increased vs more:</b> all "increased" bonuses add up and apply once. Each "more" bonus multiplies on its own, so they get stronger as you stack them. The Character sheet shows the full sum.</li>
+        </ul>
         <h3>The loop</h3>
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>

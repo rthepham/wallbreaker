@@ -5,8 +5,11 @@
 
 import {
   newGame, runTicks, getStats, equip, salvageAll, statsWithItem, craftItem, smithItem,
-  findItem, getZone,
+  findItem, getZone, setSkill, supportSlots, statsWithSkill,
+  allocatePassive, canAllocate, statsWithPassives,
 } from '../src/game.js';
+import { PASSIVES } from '../src/data/passives.js';
+import { supportFits } from '../src/data/skills.js';
 import { diagnose } from '../src/diagnosis.js';
 import { BASES } from '../src/data/items.js';
 import { smithOptions } from '../src/crafting.js';
@@ -18,7 +21,26 @@ const mode = process.argv[4] || 'naive';
 function score(s) {
   const ehp = s.life + s.armour * 0.3 + s.evasion * 0.3;
   const fire = 1 + Math.min(s.res.fire, 75) / 50;
-  return s.damage.dps * s.damage.targets ** 0.5 * ehp * fire;
+  const d = s.damage;
+  const reach = d.targets + d.splash * d.splashMult;
+  const sustain = d.lifeCost ? 1 : Math.min(1, (s.manaRegen * 1.15) / d.manaPerSecond);
+  return d.dps * sustain * reach ** 0.5 * ehp * fire;
+}
+
+// Try every combination of owned, fitting supports and keep the best.
+function bestLinks(state) {
+  const id = state.character.skill.id;
+  const owned = state.ownedSupports.filter((x) => supportFits(x, id));
+  const n = supportSlots(state);
+  let best = { sc: -1, sup: [] };
+  const rec = (start, cur) => {
+    const sc = score(statsWithSkill(state, { id, supports: cur }));
+    if (sc > best.sc) best = { sc, sup: cur };
+    if (cur.length >= n) return;
+    for (let i = start; i < owned.length; i++) rec(i + 1, [...cur, owned[i]]);
+  };
+  rec(0, []);
+  state.character.skill.supports = best.sup;
 }
 
 function upgrade(state) {
@@ -57,7 +79,31 @@ function craftFire(state) {
   }
 }
 
+// Spend passive points greedily, looking two nodes ahead so it can path to notables.
+function spendPoints(state) {
+  if (process.env.NOPASSIVES) return;
+  for (;;) {
+    const have = state.character.passives;
+    const open = Object.keys(PASSIVES).filter((id) => !canAllocate(state, id));
+    if (!open.length) return;
+    const base = score(getStats(state));
+    let best = null;
+    for (const a of open) {
+      const sa = score(statsWithPassives(state, [...have, a]));
+      let sc = sa;
+      for (const b of PASSIVES[a].links) {
+        if (have.includes(b) || b === a) continue;
+        sc = Math.max(sc, base + (score(statsWithPassives(state, [...have, a, b])) - base) / 2);
+      }
+      if (!best || sc > best.sc) best = { id: a, sc };
+    }
+    allocatePassive(state, best.id);
+  }
+}
+
 const state = newGame(seed);
+const SKILL = process.env.SKILL || 'cleave';
+setSkill(state, SKILL);
 const totalTicks = minutes * 60 * 10;
 let lastRuns = 0;
 const firstClear = {};
@@ -70,6 +116,8 @@ for (let t = 0; t < totalTicks; t += 10) {
     const rec = state.runHistory[state.runHistory.length - 1];
     allRuns.push(rec);
     if (rec.outcome === 'cleared' && !firstClear[rec.zoneId]) firstClear[rec.zoneId] = state.time;
+    spendPoints(state);
+    bestLinks(state);
     upgrade(state);
     if (mode === 'smart') {
       craftFire(state);
@@ -103,4 +151,6 @@ const d = diagnose(state, s);
 console.log('Zone now:', state.zoneId, getZone(state.zoneId).name, 'deaths', state.lifetime.deaths);
 console.log('Diagnosis:', d.primary ? `${d.primary.state}: ${d.primary.message}` : 'none');
 for (const c of d.secondary) console.log('  also:', `${c.state}: ${c.message}`);
+console.log('Skill:', state.character.skill.id, state.character.skill.supports.join('+'), 'owned', state.ownedSupports.join(','), 'dps', Math.round(s.damage.dps), 'targets', s.damage.targets, 'mana/s', s.damage.manaPerSecond.toFixed(1), 'regen', s.manaRegen.toFixed(1));
+console.log('Passives:', state.character.passives.filter((p) => PASSIVES[p].type !== 'small').map((p) => PASSIVES[p].name).join(', '), `(${state.character.passives.length - 1} nodes)`);
 console.log('Equipped:', Object.values(state.character.equipment).map((i) => i && `${i.rarity} ${BASES[i.baseId].name} [${i.mods.map((m) => `${m.family}:${m.value}`).join(', ')}]`).join(' | '));

@@ -6,15 +6,17 @@ import { MONSTERS, THREATS } from './data/monsters.js';
 import { ZONES } from './data/zones.js';
 import { BASES, SLOTS } from './data/items.js';
 import { CURRENCY_ORDER } from './data/currency.js';
+import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
+import { PASSIVES, PASSIVE_RULES } from './data/passives.js';
 import { createRng } from './rng.js';
 import {
-  computeStats, armourReduction, evadeChance, effectiveRes, itemLabel,
+  computeStats, armourReduction, evadeChance, effectiveRes, itemLabel, damageTaken,
 } from './stats.js';
 import { makePack, makeBossPack } from './combat.js';
 import { makeItem, rollMonsterDrops } from './loot.js';
 import { craft, salvageValue, smithCraft, convert } from './crafting.js';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 3;
 const DT = 1 / RULES.ticksPerSecond;
 // Window used to describe what killed the player.
 export const RECENT_SECONDS = 8;
@@ -75,7 +77,8 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
     seed,
     rngState: seed,
     time: 0,
-    character: { level: 1, xp: 0, skillId: 'cleave', equipment: { weapon: null, body: null, ring: null } },
+    character: { level: 1, xp: 0, skill: { id: 'cleave', supports: [] }, passives: ['origin'], equipment: { weapon: null, body: null, ring: null } },
+    ownedSupports: [...LINKS.startingSupports],
     player: { life: 1, mana: 1, attackTimer: 0 },
     inventory: [],
     currency: Object.fromEntries(CURRENCY_ORDER.map((c) => [c, 0])),
@@ -213,8 +216,11 @@ function fightTick(state) {
   // 1. Player skill fires if ready and affordable.
   p.attackTimer -= DT;
   if (p.attackTimer <= 0) {
-    if (p.mana >= s.damage.manaCost) {
-      p.mana -= s.damage.manaCost;
+    const d = s.damage;
+    const canPay = d.lifeCost ? p.life > d.manaCost + 1 : p.mana >= d.manaCost;
+    if (canPay) {
+      if (d.lifeCost) p.life -= d.manaCost;
+      else p.mana -= d.manaCost;
       playerAttack(state, s);
       p.attackTimer += 1 / s.damage.aps;
     } else {
@@ -259,18 +265,30 @@ function fightTick(state) {
 function playerAttack(state, s) {
   const r = rng(state);
   const d = s.damage;
-  const targets = state.run.pack.monsters.filter((m) => m.life > 0).slice(0, d.targets);
+  const alive = state.run.pack.monsters.filter((m) => m.life > 0);
+  const main = alive.slice(0, d.targets);
+  const splashed = alive.slice(d.targets, d.targets + d.splash);
+  const lowLife = d.lowLifeMore > 0 && state.player.life < s.life * 0.35 ? 1 + d.lowLifeMore / 100 : 1;
   const parts = [];
-  for (const m of targets) {
-    let dmg = r.range(d.hitMin, d.hitMax);
+  let dealt = 0;
+  const strike = (m, mult) => {
+    let dmg = r.range(d.hitMin, d.hitMax) * mult * lowLife;
     const crit = r.chance(d.critChance / 100);
     if (crit) dmg *= d.critMulti;
     dmg = Math.max(1, Math.round(dmg));
+    const applied = Math.min(dmg, Math.max(0, m.life));
     m.life -= dmg;
+    dealt += applied;
     parts.push(crit ? `${dmg}!` : `${dmg}`);
     if (m.life <= 0) monsterKilled(state, m);
+  };
+  for (const m of main) strike(m, 1);
+  for (const m of splashed) strike(m, d.splashMult);
+  if (d.leech > 0) {
+    state.player.life = Math.min(s.life, state.player.life + dealt * (d.leech / 100));
   }
-  log(state, 'hit', `${s.skill.name} hits ${targets.length} for ${parts.join(', ')}`);
+  const n = main.length + splashed.length;
+  log(state, 'hit', `${s.skill.name} hits ${n} for ${parts.join(', ')}${lowLife > 1 ? ' (Last Stand)' : ''}`);
 }
 
 function monsterHit(state, s, m, mult, isBig = false) {
@@ -287,7 +305,7 @@ function monsterHit(state, s, m, mult, isBig = false) {
     }
     taken = raw * (1 - armourReduction(s.armour, raw));
   } else {
-    taken = raw * (1 - effectiveRes(s, type, state.run.zoneId) / 100);
+    taken = damageTaken(s, type, raw, state.run.zoneId);
   }
   taken = Math.max(0, taken);
   p.life -= taken;
@@ -399,8 +417,12 @@ function runComplete(state) {
   const zoneId = run.zoneId;
   finishRecord(state, 'cleared');
   log(state, 'clear', `${getZone(zoneId).name} cleared in ${Math.round(state.time - run.record.start)}s.`);
-  if (!state.progress.cleared.includes(zoneId)) {
+  const firstClear = !state.progress.cleared.includes(zoneId);
+  if (firstClear || rng(state).chance(LINKS.bossDropChance)) grantSupport(state);
+  if (firstClear) {
     state.progress.cleared.push(zoneId);
+    const link = LINKS.unlocks.find((u) => u.zone === zoneId);
+    if (link) log(state, 'clear', `Your skill can now hold ${link.slots - 1} supports.`);
     if (getZone(zoneId + 1) && state.progress.unlocked < zoneId + 1) {
       state.progress.unlocked = zoneId + 1;
       log(state, 'clear', `First clear! ${getZone(zoneId + 1).name} is now open.`);
@@ -564,6 +586,123 @@ export function statsWithItem(state, item) {
   return computeStats(ch);
 }
 
+// ---------- Skills ----------
+
+// Number of supports the active skill can hold (links minus the skill itself).
+export function supportSlots(state) {
+  let links = LINKS.base;
+  for (const u of LINKS.unlocks) if (state.progress.cleared.includes(u.zone)) links = Math.max(links, u.slots);
+  return links - 1;
+}
+
+function grantSupport(state) {
+  const missing = SUPPORT_ORDER.filter((id) => !state.ownedSupports.includes(id));
+  if (!missing.length) return null;
+  const id = rng(state).pick(missing);
+  state.ownedSupports.push(id);
+  log(state, 'loot rare', `New support gem: ${SUPPORTS[id].name} (${SUPPORTS[id].text}). Link it in the Skills tab.`);
+  return id;
+}
+
+export function setSkill(state, skillId) {
+  if (!SKILLS[skillId]) return { ok: false, reason: 'Unknown skill.' };
+  const sk = state.character.skill;
+  sk.id = skillId;
+  // Drop supports that don't work with the new skill.
+  sk.supports = sk.supports.filter((id) => supportFits(id, skillId));
+  invalidateStats(state);
+  return { ok: true };
+}
+
+export function setSupport(state, slot, supportId) {
+  const sk = state.character.skill;
+  if (slot < 0 || slot >= supportSlots(state)) return { ok: false, reason: 'That link slot is locked.' };
+  const next = sk.supports.slice();
+  if (!supportId) {
+    next.splice(slot, 1);
+  } else {
+    if (!state.ownedSupports.includes(supportId)) return { ok: false, reason: 'You don’t own that support yet.' };
+    if (!supportFits(supportId, sk.id)) return { ok: false, reason: `${SUPPORTS[supportId].name} doesn’t work with ${SKILLS[sk.id].name}.` };
+    const existing = next.indexOf(supportId);
+    if (existing >= 0 && existing !== slot) return { ok: false, reason: 'That support is already linked.' };
+    if (slot >= next.length) next.push(supportId);
+    else next[slot] = supportId;
+  }
+  sk.supports = next;
+  invalidateStats(state);
+  return { ok: true };
+}
+
+// Stats for a hypothetical skill setup (for previews).
+export function statsWithSkill(state, skill) {
+  return computeStats({ ...state.character, skill });
+}
+
+// ---------- Passive tree ----------
+
+export function passivePoints(state) {
+  let pts = state.character.level - 1;
+  for (const b of PASSIVE_RULES.bonusPoints) if (state.progress.cleared.includes(b.zone)) pts += b.points;
+  return pts;
+}
+
+export function passivesSpent(state) {
+  return state.character.passives.filter((id) => id !== 'origin').length;
+}
+
+export function refundCost(state) {
+  return PASSIVE_RULES.refundBase + Math.floor(state.character.level / PASSIVE_RULES.refundPerLevels);
+}
+
+export function canAllocate(state, id) {
+  const node = PASSIVES[id];
+  const have = state.character.passives;
+  if (!node) return 'Unknown node.';
+  if (have.includes(id)) return 'Already allocated.';
+  if (!node.links.some((n) => have.includes(n))) return 'Allocate a connected node first.';
+  if (passivesSpent(state) >= passivePoints(state)) return 'No passive points left. You get one per level.';
+  return null;
+}
+
+// A node can be refunded if every other allocated node still connects to the start.
+export function canRefund(state, id) {
+  const have = state.character.passives;
+  if (id === 'origin') return 'The starting node can’t be refunded.';
+  if (!have.includes(id)) return 'Not allocated.';
+  const rest = new Set(have.filter((n) => n !== id));
+  const seen = new Set(['origin']);
+  const queue = ['origin'];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const n of PASSIVES[cur].links) if (rest.has(n) && !seen.has(n)) { seen.add(n); queue.push(n); }
+  }
+  if (seen.size !== rest.size) return 'Other allocated nodes depend on this one. Refund those first.';
+  if (state.scrap < refundCost(state)) return `Refunding costs ${refundCost(state)} Scrap. You have ${state.scrap}.`;
+  return null;
+}
+
+export function allocatePassive(state, id) {
+  const reason = canAllocate(state, id);
+  if (reason) return { ok: false, reason };
+  state.character.passives.push(id);
+  invalidateStats(state);
+  return { ok: true };
+}
+
+export function refundPassive(state, id) {
+  const reason = canRefund(state, id);
+  if (reason) return { ok: false, reason };
+  const cost = refundCost(state);
+  state.scrap -= cost;
+  state.character.passives = state.character.passives.filter((n) => n !== id);
+  invalidateStats(state);
+  return { ok: true, cost };
+}
+
+export function statsWithPassives(state, passives) {
+  return computeStats({ ...state.character, passives });
+}
+
 // ---------- Saving ----------
 
 export function serialize(state) {
@@ -581,6 +720,18 @@ export function deserialize(text) {
 export function migrate(data) {
   if (!data || typeof data !== 'object' || !data.version) throw new Error('Not a Wallbreaker save.');
   if (data.version > SAVE_VERSION) throw new Error('Save is from a newer version.');
+  if (data.version === 1) {
+    // v2: skills and supports.
+    data.character.skill = { id: data.character.skillId || 'cleave', supports: [] };
+    delete data.character.skillId;
+    data.ownedSupports = [...LINKS.startingSupports];
+    data.version = 2;
+  }
+  if (data.version === 2) {
+    // v3: passive tree.
+    data.character.passives = ['origin'];
+    data.version = 3;
+  }
   return data;
 }
 

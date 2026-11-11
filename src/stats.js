@@ -3,8 +3,9 @@
 
 import { PLAYER } from './data/player.js';
 import { BASES, MODS, SLOT_NAMES } from './data/items.js';
-import { SKILLS } from './data/skills.js';
+import { SKILLS, SUPPORTS } from './data/skills.js';
 import { zoneResPenalty } from './data/zones.js';
+import { PASSIVES } from './data/passives.js';
 
 export const DAMAGE_TYPES = ['physical', 'fire', 'cold', 'lightning', 'chaos'];
 
@@ -18,6 +19,15 @@ export function collectModifiers(character) {
   const L = character.level;
   mods.push({ stat: 'life', kind: 'flat', value: PLAYER.life.base + PLAYER.life.perLevel * L, source: `Level ${L}` });
   mods.push({ stat: 'mana', kind: 'flat', value: PLAYER.mana.base + PLAYER.mana.perLevel * L, source: `Level ${L}` });
+  for (const id of character.passives || []) {
+    const node = PASSIVES[id];
+    if (!node) continue;
+    for (const m of node.mods) mods.push({ ...m, source: `Passive: ${node.name}` });
+  }
+  for (const id of (character.skill && character.skill.supports) || []) {
+    const sup = SUPPORTS[id];
+    for (const m of sup.mods) mods.push({ ...m, source: `Support: ${sup.name}` });
+  }
   for (const [slot, item] of Object.entries(character.equipment)) {
     if (!item) continue;
     const base = BASES[item.baseId];
@@ -67,20 +77,26 @@ export function effectiveRes(stats, type, zoneId) {
 // Damage actually taken from one hit of the given type.
 export function damageTaken(stats, type, hit, zoneId) {
   if (type === 'physical') return hit * (1 - armourReduction(stats.armour, hit));
-  return hit * (1 - effectiveRes(stats, type, zoneId) / 100);
+  let taken = hit * (1 - effectiveRes(stats, type, zoneId) / 100);
+  // Iron Hide: armour also works on elemental hits, at reduced effect.
+  if (stats.armourVsEle > 0 && type !== 'chaos') taken *= 1 - armourReduction(stats.armour, hit) * stats.armourVsEle;
+  return taken;
 }
 
 // Largest single hit of each type the character survives from full life.
+// damageTaken grows with the hit, so a binary search finds it.
 export function maxHitTaken(stats, zoneId) {
-  const L = stats.life;
   const out = {};
-  // Physical: taken = 5H^2 / (A + 5H) = L, solved for H. Armour cap applies.
-  const A = stats.armour;
-  let H = (5 * L + Math.sqrt(25 * L * L + 20 * L * A)) / 10;
-  if (A / (A + 5 * H) > PLAYER.armourCap) H = L / (1 - PLAYER.armourCap);
-  out.physical = H;
-  for (const t of ['fire', 'cold', 'lightning', 'chaos']) {
-    out[t] = L / (1 - effectiveRes(stats, t, zoneId) / 100);
+  for (const t of DAMAGE_TYPES) {
+    let lo = 0;
+    let hi = stats.life;
+    while (damageTaken(stats, t, hi, zoneId) < stats.life && hi < 1e9) hi *= 2;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (damageTaken(stats, t, mid, zoneId) < stats.life) lo = mid;
+      else hi = mid;
+    }
+    out[t] = hi;
   }
   return out;
 }
@@ -88,14 +104,17 @@ export function maxHitTaken(stats, zoneId) {
 export function computeStats(character) {
   const mods = collectModifiers(character);
   const { flat, inc, more, sources } = group(mods);
-  const skill = SKILLS[character.skillId || 'cleave'];
+  const skill = SKILLS[(character.skill && character.skill.id) || 'cleave'];
 
   const life = Math.round(flat('life') * (1 + inc('life') / 100) * more('life'));
   const mana = Math.round(flat('mana') * (1 + inc('mana') / 100) * more('mana'));
   const manaRegen = mana * PLAYER.manaRegenPctPerSec * (1 + inc('manaRegen') / 100);
-  const lifeRegen = flat('lifeRegen') + life * PLAYER.lifeRegenPctPerSec;
+  const noRegen = flat('noRegen') > 0;
+  const lifeRegen = noRegen ? 0 : flat('lifeRegen') + life * PLAYER.lifeRegenPctPerSec;
+  const armourVsEle = flat('armourVsElemental') / 100;
   const armour = Math.round(flat('armour') * (1 + inc('armour') / 100));
-  const evasion = Math.round(flat('evasion') * (1 + inc('evasion') / 100));
+  const cannotEvade = flat('cannotEvade') > 0;
+  const evasion = cannotEvade ? 0 : Math.round(flat('evasion') * (1 + inc('evasion') / 100));
 
   const res = {
     fire: flat('fireRes'),
@@ -110,33 +129,84 @@ export function computeStats(character) {
     chaos: PLAYER.maxRes + flat('maxChaosRes'),
   };
 
-  // Weapon damage (attacks scale with the weapon).
+  // ---- Skill damage ----
+  const skillId = (character.skill && character.skill.id) || 'cleave';
+  const isAttack = skill.kind === 'attack';
   const weapon = character.equipment.weapon;
   const wb = weapon ? BASES[weapon.baseId] : PLAYER.unarmed;
-  const added = flat('addedPhys');
-  const baseMin = wb.damage[0] + added;
-  const baseMax = wb.damage[1] + added * 2;
-  const increased = inc('physical') + inc('damage');
-  const moreMult = skill.damageMore * more('physical') * more('damage');
-  const hitMin = baseMin * (1 + increased / 100) * moreMult;
-  const hitMax = baseMax * (1 + increased / 100) * moreMult;
-  const aps = wb.aps * (1 + inc('attackSpeed') / 100);
-  const critChance = Math.min(100, (wb.crit + flat('critChance')) * (1 + inc('critChance') / 100));
+  let baseMin;
+  let baseMax;
+  let added = 0;
+  if (isAttack) {
+    added = flat('addedPhys');
+    baseMin = wb.damage[0] + added;
+    baseMax = wb.damage[1] + added * 2;
+  } else {
+    const g = skill.growth ** character.level;
+    baseMin = skill.base[0] * g;
+    baseMax = skill.base[1] * g;
+  }
+  // Split base damage into typed parts. Conversion moves physical into fire.
+  const convert = Math.min(100, flat('convertPhysToFire') + flat('convertAllToFire')) / 100;
+  const typed = {};
+  if (skill.damageType === 'physical') {
+    typed.physical = [baseMin * (1 - convert), baseMax * (1 - convert)];
+    if (convert > 0) typed.fire = [baseMin * convert, baseMax * convert, 'physical'];
+  } else {
+    const allFire = flat('convertAllToFire') >= 100 && skill.damageType !== 'fire';
+    typed[allFire ? 'fire' : skill.damageType] = [baseMin, baseMax, allFire ? skill.damageType : null];
+  }
+  const kindInc = isAttack ? inc('attack') : inc('spell');
+  const moreAll = skill.damageMore * more('damage') * (isAttack ? more('attack') : more('spell'));
+  const parts = [];
+  let hitMin = 0;
+  let hitMax = 0;
+  for (const [type, [lo, hi, from]] of Object.entries(typed)) {
+    // Converted damage benefits from bonuses to both its old and new type.
+    let increased = inc('damage') + kindInc + inc(type);
+    if (from) increased += inc(from);
+    const isEle = (t) => t === 'fire' || t === 'cold' || t === 'lightning';
+    if (isEle(type) || (from && isEle(from))) increased += inc('elemental');
+    const m = moreAll * more(type);
+    const pMin = lo * (1 + increased / 100) * m;
+    const pMax = hi * (1 + increased / 100) * m;
+    parts.push({ type, baseMin: lo, baseMax: hi, increased, more: m, hitMin: pMin, hitMax: pMax, convertedFrom: from || null });
+    hitMin += pMin;
+    hitMax += pMax;
+  }
+  const mainPart = parts.reduce((a, b) => (b.hitMax > a.hitMax ? b : a), parts[0]);
+
+  const speedBase = isAttack ? wb.aps : skill.castRate;
+  const speedInc = isAttack ? inc('attackSpeed') : inc('castSpeed');
+  const aps = speedBase * (1 + speedInc / 100) * more('speed');
+  const critBase = isAttack ? wb.crit : skill.crit;
+  const noCrit = flat('noCrit') > 0;
+  const critChance = noCrit ? 0 : Math.min(100, (critBase + flat('critChance')) * (1 + inc('critChance') / 100));
   const critMulti = PLAYER.baseCritMulti + flat('critMulti') / 100;
   const critFactor = 1 + (critChance / 100) * (critMulti - 1);
   const avgHit = (hitMin + hitMax) / 2;
   const dps = avgHit * aps * critFactor;
-  const targets = skill.targets + flat('targets');
-  const manaCost = skill.manaCost;
+  const single = flat('singleTarget') > 0;
+  const targetMult = 1 + flat('targetMultPct') / 100;
+  const targets = single ? 1 : Math.round((skill.targets + flat('targets')) * targetMult);
+  const splash = single ? 0 : Math.round((skill.splash || 0) * targetMult);
+  const splashMult = skill.splashMult || 0;
+  const supportIds = (character.skill && character.skill.supports) || [];
+  const manaMult = supportIds.reduce((a, id) => a * SUPPORTS[id].manaMult, 1);
+  const manaCost = Math.round(skill.manaCost * manaMult * 10) / 10;
+  const lifeCost = flat('lifeCost') > 0;
+  const leech = flat('leech');
+  const lowLifeMore = flat('lowLifeMore');
 
   return {
     level: character.level,
-    life, mana, lifeRegen, manaRegen, armour, evasion, res, maxRes,
-    skill: { name: skill.name, damageType: skill.damageType, tags: skill.tags },
+    life, mana, lifeRegen, manaRegen, armour, evasion, res, maxRes, armourVsEle, cannotEvade, noRegen,
+    keystones: (character.passives || []).filter((id) => PASSIVES[id] && PASSIVES[id].type === 'keystone'),
+    skill: { id: skillId, name: skill.name, kind: skill.kind, damageType: mainPart.type, tags: skill.tags, supports: supportIds },
     damage: {
-      baseMin, baseMax, added, increased, moreMult, hitMin, hitMax, avgHit,
-      weaponAps: wb.aps, aps, critChance, critMulti, critFactor, dps, targets,
-      manaCost, manaPerSecond: manaCost * aps,
+      baseMin, baseMax, added, parts, increased: mainPart.increased, moreMult: mainPart.more, hitMin, hitMax, avgHit,
+      speedBase, speedInc, weaponAps: speedBase, aps, critChance, critMulti, critFactor, dps, targets,
+      splash, splashMult, manaCost, manaMult, manaPerSecond: manaCost * aps, lifeCost, leech, lowLifeMore,
     },
     sources: {
       life: sources('life'), mana: sources('mana'), armour: sources('armour'),
@@ -144,7 +214,9 @@ export function computeStats(character) {
       lightningRes: sources('lightningRes'), chaosRes: sources('chaosRes'),
       lifeRegen: sources('lifeRegen'), manaRegen: sources('manaRegen'),
       physical: sources('physical'), addedPhys: sources('addedPhys'),
-      attackSpeed: sources('attackSpeed'), critChance: sources('critChance'),
+      attackSpeed: sources('attackSpeed'), castSpeed: sources('castSpeed'), critChance: sources('critChance'),
+      attack: sources('attack'),
+      spell: sources('spell'), elemental: sources('elemental'), fire: sources('fire'), damage: sources('damage'),
       critMulti: sources('critMulti'), targets: sources('targets'),
     },
   };

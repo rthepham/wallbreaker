@@ -2,9 +2,9 @@
 
 export const MONSTERS = {
   lifeBase: 15,
-  lifeGrowth: 1.11,
+  lifeGrowth: 1.14,
   hitBase: 5,
-  hitGrowth: 1.075,
+  hitGrowth: 1.10,
   // Global knob for monster damage. 1.0 = doc values. Lowered because every
   // monster in a pack attacks at once, which the doc's per-hit numbers didn't account for.
   damageScale: 0.4,
@@ -56,7 +56,7 @@ export const THREATS = {
     // Element is chosen by the zone's threat mix.
     damageType: 'fire',
     interval: 1.0,
-    hitMult: 1.2,
+    hitMult: 1.5,
     lifeMult: 0.8,
     xpMult: 1.1,
     dropMult: 1,

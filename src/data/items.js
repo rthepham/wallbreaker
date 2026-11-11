@@ -79,6 +79,21 @@ export const MODS = {
     stat: 'addedPhys', kind: 'flat', text: 'Adds {v} to {v2} Physical Damage to Attacks', double: true, weight: 60,
     tiers: tiers([[1, 1], [1, 2], [2, 3], [3, 5], [5, 7], [7, 9], [9, 11], [11, 14]]),
   },
+  spell_inc: {
+    name: 'Increased Spell Damage', type: 'prefix', slots: ['weapon'],
+    stat: 'spell', kind: 'increased', text: '{v}% increased Spell Damage', weight: 100,
+    tiers: tiers([[12, 19], [20, 31], [32, 47], [48, 63], [64, 79], [80, 95], [96, 119], [120, 135]]),
+  },
+  ring_ele_inc: {
+    name: 'Increased Elemental Damage', type: 'prefix', slots: ['ring'],
+    stat: 'elemental', kind: 'increased', text: '{v}% increased Elemental Damage', weight: 60,
+    tiers: tiers([[5, 8], [9, 12], [13, 16], [17, 20], [21, 24], [25, 28], [29, 32], [33, 36]]),
+  },
+  cast_speed: {
+    name: 'Cast Speed', type: 'suffix', slots: ['weapon'],
+    stat: 'castSpeed', kind: 'increased', text: '{v}% increased Cast Speed', weight: 80,
+    tiers: tiers([[5, 7], [8, 10], [11, 13], [14, 16], [17, 19], [20, 22], [23, 25], [26, 28]]),
+  },
   fire_res: {
     name: 'Fire Resistance', type: 'suffix', slots: ['body', 'ring'],
     stat: 'fireRes', kind: 'flat', text: '+{v}% to Fire Resistance', weight: 100,

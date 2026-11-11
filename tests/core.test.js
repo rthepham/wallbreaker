@@ -19,7 +19,7 @@ import { makeMonster } from '../src/combat.js';
 import { ZONES } from '../src/data/zones.js';
 
 const item = (baseId, mods = [], rarity = 'magic', ilvl = 50) => ({ uid: 1, baseId, ilvl, rarity, name: null, mods });
-const char = (equipment = {}, level = 1) => ({ level, skillId: 'cleave', equipment: { weapon: null, body: null, ring: null, ...equipment } });
+const char = (equipment = {}, level = 1) => ({ level, skill: { id: 'cleave', supports: [] }, equipment: { weapon: null, body: null, ring: null, ...equipment } });
 
 // ---------- M0: stat sheet ----------
 

@@ -40,3 +40,26 @@ export function timeAgo(seconds) {
   if (seconds < 60) return `${Math.round(seconds)}s`;
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
+
+const STAT_NAMES = {
+  life: 'maximum Life', mana: 'maximum Mana', armour: 'Armour', evasion: 'Evasion',
+  physical: 'Physical Damage', damage: 'Damage', attack: 'Attack Damage', spell: 'Spell Damage',
+  elemental: 'Elemental Damage', attackSpeed: 'Attack Speed', castSpeed: 'Cast Speed',
+  critChance: 'Critical Strike Chance', manaRegen: 'Mana Regeneration Rate',
+};
+
+// Text for a stat modifier from the passive tree.
+export function statModText(m) {
+  const v = m.value;
+  if (m.kind === 'increased') return `${v}% increased ${STAT_NAMES[m.stat] || m.stat}`;
+  if (m.kind === 'more') return v >= 0 ? `${v}% more ${STAT_NAMES[m.stat] || m.stat}` : `${-v}% less ${STAT_NAMES[m.stat] || m.stat}`;
+  switch (m.stat) {
+    case 'lifeRegen': return `Regenerate ${v} Life per second`;
+    case 'critMulti': return `+${v}% to Critical Strike Multiplier`;
+    case 'targets': return `Skills hit +${v} additional target${v > 1 ? 's' : ''}`;
+    case 'fireRes': return `+${v}% to Fire Resistance`;
+    case 'coldRes': return `+${v}% to Cold Resistance`;
+    case 'lightningRes': return `+${v}% to Lightning Resistance`;
+    default: return `+${v} to ${STAT_NAMES[m.stat] || m.stat}`;
+  }
+}

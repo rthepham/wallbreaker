@@ -2,11 +2,12 @@
 
 import {
   newGame, runTicks, serialize, deserialize, selectZone, setAutoAdvance, equip, unequip,
-  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem,
+  salvage, salvageAll, toggleLock, craftItem, smithItem, convertCurrency, findItem, setSkill, setSupport, allocatePassive, refundPassive, passivePoints, passivesSpent,
 } from '../game.js';
 import { CURRENCY } from '../data/currency.js';
+import { SKILLS } from '../data/skills.js';
 import {
-  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet,
+  renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree,
 } from './render.js';
 
 const SAVE_KEY = 'wallbreaker.save';
@@ -15,7 +16,7 @@ const TICK_MS = 100;
 const MAX_CATCHUP_MS = 60_000; // offline progress arrives in M9
 
 let state;
-const ui = { selectedUid: null, filter: 'all', tab: 'gear', speed: 1, message: '', messageKind: '', messageAt: 0, version: 0, confirmReset: false };
+const ui = { selectedNode: null, selectedUid: null, filter: 'all', tab: 'gear', speed: 1, message: '', messageKind: '', messageAt: 0, version: 0, confirmReset: false };
 
 const $ = (id) => document.getElementById(id);
 
@@ -67,10 +68,12 @@ function render(force = false) {
   for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === ui.speed));
   for (const b of document.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === ui.tab));
   for (const p of document.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== ui.tab;
+  const free = passivePoints(state) - passivesSpent(state);
+  put('tree-count', free > 0 ? String(free) : '');
 
   // The lower panels only re-render when something they show has changed,
   // so dropdowns and scroll positions aren't reset 10 times a second.
-  const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(',')}|${state.character.level}|${state.zoneId}`;
+  const sig = `${ui.version}|${ui.tab}|${state.nextUid}|${state.inventory.length}|${state.scrap}|${Object.values(state.currency).join(',')}|${state.character.level}|${state.zoneId}|${JSON.stringify(state.character.skill)}|${state.ownedSupports.length}|${state.progress.cleared.length}|${state.character.passives.length}|${ui.selectedNode}`;
   if (!force && sig === lowerSig) return;
   lowerSig = sig;
   if (ui.tab === 'gear') {
@@ -83,10 +86,18 @@ function render(force = false) {
     if (sel2 && keepSmith && [...sel2.options].some((o) => o.value === keepSmith)) sel2.value = keepSmith;
     const inv2 = document.querySelector('.inv');
     if (inv2) inv2.scrollTop = scroll;
+  } else if (ui.tab === 'tree') {
+    put('tree', renderTree(state, ui));
+  } else if (ui.tab === 'skills') {
+    put('skills', renderSkills(state));
   } else if (ui.tab === 'sheet') {
     put('sheet', renderSheet(state));
   }
   $('reset-confirm').hidden = !ui.confirmReset;
+  const t = $('toast');
+  t.hidden = !ui.message;
+  t.className = `toast ${ui.messageKind || ''}`;
+  t.textContent = ui.message;
 }
 
 // ---------- Clock ----------
@@ -172,6 +183,24 @@ function handle(action, el) {
       res = convertCurrency(state, Number(el.dataset.idx));
       if (res.ok) notify('Converted.', 'good');
       break;
+    case 'skill':
+      res = setSkill(state, el.dataset.skill);
+      if (res.ok) notify(`Now using ${SKILLS[el.dataset.skill].name}.`, 'good');
+      break;
+    case 'support':
+      res = setSupport(state, Number(el.dataset.slot), el.value || null);
+      break;
+    case 'node':
+      ui.selectedNode = el.dataset.node;
+      break;
+    case 'allocate':
+      res = allocatePassive(state, el.dataset.node);
+      if (res.ok) notify('Passive allocated.', 'good');
+      break;
+    case 'refund':
+      res = refundPassive(state, el.dataset.node);
+      if (res.ok) notify(`Refunded for ${res.cost} Scrap.`, 'good');
+      break;
     case 'reset-ask':
       ui.confirmReset = true;
       break;
@@ -198,6 +227,18 @@ function wire() {
     const el = e.target.closest('[data-action]');
     if (!el || el.disabled) return;
     handle(el.dataset.action, el);
+  });
+  // Tree nodes are SVG groups, so make Enter and Space work like a click.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('g[data-action]');
+    if (!el) return;
+    e.preventDefault();
+    handle(el.dataset.action, el);
+  });
+  document.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-change]');
+    if (el) handle(el.dataset.change, el);
   });
   $('auto-advance').addEventListener('change', (e) => {
     setAutoAdvance(state, e.target.checked);
