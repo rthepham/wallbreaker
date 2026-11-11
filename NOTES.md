@@ -5,7 +5,7 @@ drops/inventory/equipping, crafting, skills & supports, passive tree), plus extr
 all six currencies, salvage + the Smith, item comparison, browser save with migrations.
 
 ## Commands
-- `npm test` – 23 automated tests (formulas, crafting rules, determinism, save/load, M1–M4 criteria)
+- `npm test` – 49 automated tests (formulas, crafting, skills, supports, passives, keystones, save/load, milestone criteria)
 - `npm run balance -- 40 <seed> naive|smart` – headless bot plays 40 sim-minutes and reports per-zone deaths
 - `npm run build` – writes `dist/wallbreaker.html` (published page) and `dist/play-local.html`
 
@@ -19,10 +19,9 @@ all six currencies, salvage + the Smith, item comparison, browser save with migr
 | Monster damage | ×1 | ×0.4 | Whole pack attacks at once |
 | Swarm hit / interval | 0.5× / – | 0.35× / 1.8s | 15 attackers out-damaged every other threat |
 | Brute life | – | 1.2× | Brute packs were too tanky for early DPS |
-| Caster hit | 1.0× | 1.2× | Makes zone 4 a real fire wall |
 | Zone monster levels | ~5/zone | 1, 4, 8, 13, 18 | Smoother early curve |
 | Monster life / hit growth per level | 1.11 / 1.075 | 1.14 / 1.10 | Keeps walls after supports + passives |
-| Caster hit (revised) | 1.0× | 1.5× | Zone 4 stays a fire wall with a full build |
+| Caster hit | 1.0× | 1.5× | Zone 4 stays a fire wall with a full build |
 | Fireball / Arc base damage | 12–18 / 4–30 | 6–9 / 1–10 | Spells outclassed Cleave |
 | Spell growth per level | 1.09 | 1.065 | Outgrew weapons ~5× by level 20 |
 | Spell mana costs | 10 / 12 | 6 / 7 | Matches the mana regen change |
