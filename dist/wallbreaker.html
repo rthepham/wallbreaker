@@ -3619,195 +3619,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return data;
   }
 
-  // src/diagnosis.js
-  var WINDOW_RUNS = 5;
-  var WINDOW_SECONDS = 180;
-  var fmt = (n) => Math.round(n).toLocaleString("en-US");
-  var cap = (s) => s[0].toUpperCase() + s.slice(1);
-  function threatLabel(threat) {
-    return threat === "boss" ? "the boss" : `a ${THREATS[threat].name}`;
-  }
-  function diagnosisWindow(state2) {
-    const zoneId = state2.run ? state2.run.zoneId : state2.zoneId;
-    const finished = state2.runHistory.filter((r) => r.zoneId === zoneId);
-    const lastN = finished.slice(-WINDOW_RUNS);
-    const recent = finished.filter((r) => r.end >= state2.time - WINDOW_SECONDS);
-    const win = recent.length > lastN.length ? recent : lastN;
-    const cur = state2.run && state2.run.record;
-    return cur && cur.outcome === "running" && cur.zoneId === zoneId ? [...win, cur] : win;
-  }
-  function resLine(stats, type, zoneId) {
-    const eff = effectiveRes(stats, type, zoneId);
-    return `Your ${type} resistance is ${fmt(eff)}% (max ${stats.maxRes[type]}%).`;
-  }
-  function physLine(stats, raw, zone) {
-    const red = raw > 0 ? stats.armour / (stats.armour + 5 * raw) : 0;
-    const ev = zone ? evadeChance(stats.evasion, zone.level) : 0;
-    return `Your armour (${fmt(stats.armour)}) stops ${fmt(Math.min(0.9, red) * 100)}% of a hit that size, you evade ${fmt(ev * 100)}% of attacks, and you have ${fmt(stats.life)} life.`;
-  }
-  function threatPlural(threat) {
-    return threat === "boss" ? "The boss" : `${THREATS[threat].name}s`;
-  }
-  function mainKiller(d) {
-    const top = d.recentDamage && d.recentDamage[0];
-    if (top) return top;
-    return { threat: d.threat, type: d.type, taken: d.taken, hits: 1, biggestRaw: d.raw };
-  }
-  function lookAtFor(type, threat) {
-    if (threat === "blight") return "Chaos resistance, life regeneration, killing Blight packs faster";
-    if (type === "physical") return "Armour, Evasion, maximum Life";
-    if (type === "chaos") return "Chaos resistance, Life regeneration";
-    return `${cap(type)} resistance, maximum Life`;
-  }
-  function diagnose(state2, stats) {
-    var _a;
-    const zid = state2.run ? state2.run.zoneId : state2.zoneId;
-    const zone = areaById(zid);
-    const runs = diagnosisWindow(state2);
-    const causes = [];
-    const deaths = runs.flatMap((r) => r.deaths);
-    if (deaths.length >= 2) {
-      const counts = {};
-      const key = (d) => {
-        const k2 = mainKiller(d);
-        return `${k2.threat}:${k2.type}`;
-      };
-      for (const d of deaths) counts[key(d)] = (counts[key(d)] || 0) + 1;
-      let best = deaths[deaths.length - 1];
-      for (const d of deaths) if (counts[key(d)] > counts[key(best)]) best = d;
-      const k = mainKiller(best);
-      const n = counts[key(best)];
-      const detailStat = k.type === "physical" ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, zid);
-      let message;
-      if (k.threat === "blight") {
-        message = `Rotted away by Blight: its stacks dealt ${fmt(k.taken)} chaos damage over your last ${RECENT_SECONDS} seconds. Your chaos resistance is ${fmt(stats.res.chaos)}% and you regenerate ${fmt(stats.lifeRegen)} life per second.`;
-      } else if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
-        const what = best.isBig && k.threat === "boss" ? "the boss's heavy blow" : threatLabel(k.threat);
-        message = `Killed by a ${fmt(k.biggestRaw)} ${k.type} hit from ${what}. ${detailStat}`;
-      } else {
-        message = k.threat === "boss" ? `Worn down by the boss: it dealt ${fmt(k.taken)} ${k.type} damage in your last ${RECENT_SECONDS} seconds (${k.hits} hits). ${detailStat}` : `Overwhelmed by ${threatPlural(k.threat)}: they dealt ${fmt(k.taken)} ${k.type} damage in your last ${RECENT_SECONDS} seconds (${k.hits} hits). ${detailStat}`;
-      }
-      causes.push({
-        state: "Dying",
-        score: 100 + deaths.length * 10,
-        damageType: k.type,
-        message,
-        detail: `${deaths.length} deaths in your last ${runs.length} runs here (${n} mainly from ${k.type} damage by ${k.threat === "boss" ? "the boss" : `${THREATS[k.threat].name}s`}).`,
-        lookAt: lookAtFor(k.type, k.threat)
-      });
-    }
-    let worst = null;
-    for (const r of runs) {
-      for (const h of Object.values(r.worstHits)) {
-        if (h.pct > 0.5 && (!worst || h.pct > worst.pct)) worst = h;
-      }
-    }
-    if (worst) {
-      const who = worst.threat === "boss" ? worst.isBig ? "The boss's heavy blows" : "Boss hits" : `${THREATS[worst.threat].name} ${worst.type === "physical" && worst.threat === "brute" ? "slams" : "hits"}`;
-      const tail = worst.type === "physical" ? `More armour or life would help. ${physLine(stats, worst.raw, zone)}` : resLine(stats, worst.type, zid);
-      causes.push({
-        state: "Fragile",
-        score: 50 + worst.pct * 50,
-        damageType: worst.type,
-        message: `${who} take ${fmt(worst.pct * 100)}% of your life (${fmt(worst.taken)} ${worst.type} of ${fmt(worst.maxLife)}). ${tail}`,
-        lookAt: lookAtFor(worst.type)
-      });
-    }
-    if (zone) {
-      const byThreat = {};
-      for (const r of runs) {
-        for (const p of r.packs) (byThreat[_a = p.threat] || (byThreat[_a] = [])).push(p.seconds);
-      }
-      let slowest = null;
-      for (const [threat, times] of Object.entries(byThreat)) {
-        const avg = times.reduce((a, b) => a + b, 0) / times.length;
-        const ratio = avg / zone.targetPackSeconds;
-        if (ratio > 3 && (!slowest || ratio > slowest.ratio)) slowest = { threat, avg, ratio };
-      }
-      if (slowest) {
-        const d = stats.damage;
-        const hint = slowest.threat === "swarm" ? `Your skill hits ${d.targets} targets per use.` : `You deal ${fmt(d.dps)} damage per second to each target.`;
-        causes.push({
-          state: "Slow",
-          score: 30 + slowest.ratio * 5,
-          message: `${THREATS[slowest.threat].name} packs take ${fmt(slowest.avg)}s each (target ${zone.targetPackSeconds}s). ${hint}`,
-          lookAt: slowest.threat === "swarm" ? "Targets hit, damage per hit" : "Damage, attack speed, critical strikes"
-        });
-      }
-    }
-    const fight = runs.reduce((a, r) => a + r.fightTime, 0);
-    const starved = runs.reduce((a, r) => a + r.starvedTime, 0);
-    if (fight > 5 && starved / fight > 0.2) {
-      const d = stats.damage;
-      causes.push({
-        state: "Starved",
-        score: 40 + starved / fight * 100,
-        message: `Out of mana ${fmt(starved / fight * 100)}% of the time. Your skill uses ${d.manaPerSecond.toFixed(1)} mana per second; you regenerate ${stats.manaRegen.toFixed(1)}.`,
-        lookAt: "Maximum mana, mana regeneration"
-      });
-    }
-    const bossDeaths = deaths.filter((d) => d.atBoss).length;
-    let longest = 0;
-    let bossLife = null;
-    for (const r of runs) {
-      if (r.bossMaxLife) bossLife = r.bossMaxLife;
-      const secs = r.bossSeconds ?? (r.bossStart != null ? (r.end ?? state2.time) - r.bossStart : 0);
-      longest = Math.max(longest, secs);
-    }
-    if (bossLife && (longest > 60 || bossDeaths > 0)) {
-      const ttk = bossLife / Math.max(1, stats.damage.dps);
-      const why = bossDeaths > 0 ? `It killed you ${bossDeaths} time${bossDeaths > 1 ? "s" : ""}. ` : "";
-      causes.push({
-        state: "Stuck on boss",
-        score: 60 + bossDeaths * 15,
-        message: `${why}The boss has ${fmt(bossLife)} life. At your ${fmt(stats.damage.dps)} single-target DPS that takes ${fmt(ttk)}s.`,
-        lookAt: bossDeaths > 0 ? "Single-target damage, max hit taken" : "Single-target damage"
-      });
-    }
-    const struggling = deaths.length > 0 || causes.some((c) => c.state === "Slow" || c.state === "Stuck on boss");
-    if (zone && struggling) {
-      let worst2 = null;
-      for (const { label, res, plural } of zoneResistances(zone)) {
-        const f = damageFactorVs(stats.damage, res);
-        if (f <= 0.75 && (!worst2 || f < worst2.f)) worst2 = { label, res, f, plural };
-      }
-      if (worst2) {
-        const types = Object.entries(worst2.res).filter(([, v]) => v > 0).map(([t, v]) => `${v}% ${t}`).join(" and ");
-        const yours = stats.damage.parts.map((p) => p.type).join(" and ");
-        causes.push({
-          state: "Resisted",
-          score: 35 + (1 - worst2.f) * 80,
-          message: `${worst2.label} ${worst2.plural ? "resist" : "resists"} ${types} damage. Your ${yours} hits deal ${fmt((1 - worst2.f) * 100)}% less to them.`,
-          lookAt: "Penetration, converting your damage, or a skill of another element"
-        });
-      }
-    }
-    causes.sort((a, b) => b.score - a.score);
-    const primary = causes[0] || null;
-    const rest = causes.slice(1).filter((c) => !(primary && primary.state === "Dying" && c.state === "Fragile" && c.damageType === primary.damageType));
-    return {
-      stalled: !!primary,
-      primary,
-      secondary: rest.slice(0, 2),
-      runsConsidered: runs.length
-    };
-  }
-  function zoneResistances(zone) {
-    const out = [];
-    for (const m of zone.mix) {
-      const T2 = THREATS[m.threat];
-      const res = { ...T2.res || {} };
-      if (m.threat === "caster" && T2.ownElementRes) res[m.element] = T2.ownElementRes;
-      if (Object.keys(res).length) out.push({ label: m.threat === "caster" ? `${cap(m.element)} Casters` : `${T2.name}s`, res, plural: true });
-    }
-    if (zone.boss.res) out.push({ label: zone.boss.name, res: zone.boss.res, plural: false });
-    return out;
-  }
-
   // src/ui/format.js
-  var fmt2 = (n) => Math.round(n).toLocaleString("en-US");
+  var fmt = (n) => Math.round(n).toLocaleString("en-US");
   var fmt1 = (n) => (Math.round(n * 10) / 10).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  var cap2 = (s) => s[0].toUpperCase() + s.slice(1);
+  var cap = (s) => s[0].toUpperCase() + s.slice(1);
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   }
@@ -3882,6 +3697,191 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }
   }
 
+  // src/diagnosis.js
+  var WINDOW_RUNS = 5;
+  var WINDOW_SECONDS = 180;
+  var fmt2 = (n) => Math.round(n).toLocaleString("en-US");
+  var cap2 = (s) => s[0].toUpperCase() + s.slice(1);
+  function threatLabel(threat) {
+    return threat === "boss" ? "the boss" : `a ${THREATS[threat].name}`;
+  }
+  function diagnosisWindow(state2) {
+    const zoneId = state2.run ? state2.run.zoneId : state2.zoneId;
+    const finished = state2.runHistory.filter((r) => r.zoneId === zoneId);
+    const lastN = finished.slice(-WINDOW_RUNS);
+    const recent = finished.filter((r) => r.end >= state2.time - WINDOW_SECONDS);
+    const win = recent.length > lastN.length ? recent : lastN;
+    const cur = state2.run && state2.run.record;
+    return cur && cur.outcome === "running" && cur.zoneId === zoneId ? [...win, cur] : win;
+  }
+  function resLine(stats, type, zoneId) {
+    const eff = effectiveRes(stats, type, zoneId);
+    return `Your ${type} resistance is ${fmt2(eff)}% (max ${stats.maxRes[type]}%).`;
+  }
+  function physLine(stats, raw, zone) {
+    const red = raw > 0 ? stats.armour / (stats.armour + 5 * raw) : 0;
+    const ev = zone ? evadeChance(stats.evasion, zone.level) : 0;
+    return `Your armour (${fmt2(stats.armour)}) stops ${fmt2(Math.min(0.9, red) * 100)}% of a hit that size, you evade ${fmt2(ev * 100)}% of attacks, and you have ${fmt2(stats.life)} life.`;
+  }
+  function threatPlural(threat) {
+    return threat === "boss" ? "The boss" : `${THREATS[threat].name}s`;
+  }
+  function mainKiller(d) {
+    const top = d.recentDamage && d.recentDamage[0];
+    if (top) return top;
+    return { threat: d.threat, type: d.type, taken: d.taken, hits: 1, biggestRaw: d.raw };
+  }
+  function lookAtFor(type, threat) {
+    if (threat === "blight") return "Chaos resistance, life regeneration, killing Blight packs faster";
+    if (type === "physical") return "Armour, Evasion, maximum Life";
+    if (type === "chaos") return "Chaos resistance, Life regeneration";
+    return `${cap2(type)} resistance, maximum Life`;
+  }
+  function diagnose(state2, stats) {
+    var _a;
+    const zid = state2.run ? state2.run.zoneId : state2.zoneId;
+    const zone = areaById(zid);
+    const runs = diagnosisWindow(state2);
+    const causes = [];
+    const deaths = runs.flatMap((r) => r.deaths);
+    if (deaths.length >= 2) {
+      const counts = {};
+      const key = (d) => {
+        const k2 = mainKiller(d);
+        return `${k2.threat}:${k2.type}`;
+      };
+      for (const d of deaths) counts[key(d)] = (counts[key(d)] || 0) + 1;
+      let best = deaths[deaths.length - 1];
+      for (const d of deaths) if (counts[key(d)] > counts[key(best)]) best = d;
+      const k = mainKiller(best);
+      const n = counts[key(best)];
+      const detailStat = k.type === "physical" ? physLine(stats, k.biggestRaw, zone) : resLine(stats, k.type, zid);
+      let message;
+      if (k.threat === "blight") {
+        message = `Rotted away by Blight: its stacks dealt ${fmt2(k.taken)} chaos damage over your last ${RECENT_SECONDS} seconds. Your chaos resistance is ${fmt2(stats.res.chaos)}% and you regenerate ${fmt2(stats.lifeRegen)} life per second.`;
+      } else if (k.hits <= 2 || k.biggestRaw >= best.maxLife * 0.4) {
+        const what = best.isBig && k.threat === "boss" ? "the boss's heavy blow" : threatLabel(k.threat);
+        message = `Killed by a ${fmt2(k.biggestRaw)} ${k.type} hit from ${what}. ${detailStat}`;
+      } else {
+        message = k.threat === "boss" ? `Worn down by the boss: it dealt ${fmt2(k.taken)} ${k.type} damage in your last ${RECENT_SECONDS} seconds (${k.hits} hits). ${detailStat}` : `Overwhelmed by ${threatPlural(k.threat)}: they dealt ${fmt2(k.taken)} ${k.type} damage in your last ${RECENT_SECONDS} seconds (${k.hits} hits). ${detailStat}`;
+      }
+      causes.push({
+        state: "Dying",
+        score: 100 + deaths.length * 10,
+        damageType: k.type,
+        message,
+        detail: `${deaths.length} deaths in your last ${runs.length} runs here (${n} mainly from ${k.type} damage by ${k.threat === "boss" ? "the boss" : `${THREATS[k.threat].name}s`}).`,
+        lookAt: lookAtFor(k.type, k.threat)
+      });
+    }
+    let worst = null;
+    for (const r of runs) {
+      for (const h of Object.values(r.worstHits)) {
+        if (h.pct > 0.5 && (!worst || h.pct > worst.pct)) worst = h;
+      }
+    }
+    if (worst) {
+      const who = worst.threat === "boss" ? worst.isBig ? "The boss's heavy blows" : "Boss hits" : `${THREATS[worst.threat].name} ${worst.type === "physical" && worst.threat === "brute" ? "slams" : "hits"}`;
+      const tail = worst.type === "physical" ? `More armour or life would help. ${physLine(stats, worst.raw, zone)}` : resLine(stats, worst.type, zid);
+      causes.push({
+        state: "Fragile",
+        score: 50 + worst.pct * 50,
+        damageType: worst.type,
+        message: `${who} take ${fmt2(worst.pct * 100)}% of your life (${fmt2(worst.taken)} ${worst.type} of ${fmt2(worst.maxLife)}). ${tail}`,
+        lookAt: lookAtFor(worst.type)
+      });
+    }
+    if (zone) {
+      const byThreat = {};
+      for (const r of runs) {
+        for (const p of r.packs) (byThreat[_a = p.threat] || (byThreat[_a] = [])).push(p.seconds);
+      }
+      let slowest = null;
+      for (const [threat, times] of Object.entries(byThreat)) {
+        const avg = times.reduce((a, b) => a + b, 0) / times.length;
+        const ratio = avg / zone.targetPackSeconds;
+        if (ratio > 3 && (!slowest || ratio > slowest.ratio)) slowest = { threat, avg, ratio };
+      }
+      if (slowest) {
+        const d = stats.damage;
+        const hint = slowest.threat === "swarm" ? `Your skill hits ${d.targets} targets per use.` : `You deal ${fmt2(d.dps)} damage per second to each target.`;
+        causes.push({
+          state: "Slow",
+          score: 30 + slowest.ratio * 5,
+          message: `${THREATS[slowest.threat].name} packs take ${fmt2(slowest.avg)}s each (target ${zone.targetPackSeconds}s). ${hint}`,
+          lookAt: slowest.threat === "swarm" ? "Targets hit, damage per hit" : "Damage, attack speed, critical strikes"
+        });
+      }
+    }
+    const fight = runs.reduce((a, r) => a + r.fightTime, 0);
+    const starved = runs.reduce((a, r) => a + r.starvedTime, 0);
+    if (fight > 5 && starved / fight > 0.2) {
+      const d = stats.damage;
+      causes.push({
+        state: "Starved",
+        score: 40 + starved / fight * 100,
+        message: `Out of mana ${fmt2(starved / fight * 100)}% of the time. Your skill uses ${d.manaPerSecond.toFixed(1)} mana per second; you regenerate ${stats.manaRegen.toFixed(1)}.`,
+        lookAt: "Maximum mana, mana regeneration"
+      });
+    }
+    const bossDeaths = deaths.filter((d) => d.atBoss).length;
+    let longest = 0;
+    let bossLife = null;
+    for (const r of runs) {
+      if (r.bossMaxLife) bossLife = r.bossMaxLife;
+      const secs = r.bossSeconds ?? (r.bossStart != null ? (r.end ?? state2.time) - r.bossStart : 0);
+      longest = Math.max(longest, secs);
+    }
+    if (bossLife && (longest > 60 || bossDeaths > 0)) {
+      const ttk = bossLife / Math.max(1, stats.damage.dps);
+      const why = bossDeaths > 0 ? `It killed you ${bossDeaths} time${bossDeaths > 1 ? "s" : ""}. ` : "";
+      causes.push({
+        state: "Stuck on boss",
+        score: 60 + bossDeaths * 15,
+        message: `${why}The boss has ${fmt2(bossLife)} life. At your ${fmt2(stats.damage.dps)} single-target DPS that takes ${fmt2(ttk)}s.`,
+        lookAt: bossDeaths > 0 ? "Single-target damage, max hit taken" : "Single-target damage"
+      });
+    }
+    const struggling = deaths.length > 0 || causes.some((c) => c.state === "Slow" || c.state === "Stuck on boss");
+    if (zone && struggling) {
+      let worst2 = null;
+      for (const { label, res, plural } of zoneResistances(zone)) {
+        const f = damageFactorVs(stats.damage, res);
+        if (f <= 0.75 && (!worst2 || f < worst2.f)) worst2 = { label, res, f, plural };
+      }
+      if (worst2) {
+        const types = Object.entries(worst2.res).filter(([, v]) => v > 0).map(([t, v]) => `${v}% ${t}`).join(" and ");
+        const yours = stats.damage.parts.map((p) => p.type).join(" and ");
+        causes.push({
+          state: "Resisted",
+          score: 35 + (1 - worst2.f) * 80,
+          message: `${worst2.label} ${worst2.plural ? "resist" : "resists"} ${types} damage. Your ${yours} hits deal ${fmt2((1 - worst2.f) * 100)}% less to them.`,
+          lookAt: "Penetration, converting your damage, or a skill of another element"
+        });
+      }
+    }
+    causes.sort((a, b) => b.score - a.score);
+    const primary = causes[0] || null;
+    const rest = causes.slice(1).filter((c) => !(primary && primary.state === "Dying" && c.state === "Fragile" && c.damageType === primary.damageType));
+    return {
+      stalled: !!primary,
+      primary,
+      secondary: rest.slice(0, 2),
+      runsConsidered: runs.length
+    };
+  }
+  function zoneResistances(zone) {
+    const out = [];
+    for (const m of zone.mix) {
+      const T2 = THREATS[m.threat];
+      const res = { ...T2.res || {} };
+      if (m.threat === "caster" && T2.ownElementRes) res[m.element] = T2.ownElementRes;
+      if (Object.keys(res).length) out.push({ label: m.threat === "caster" ? `${cap2(m.element)} Casters` : `${T2.name}s`, res, plural: true });
+    }
+    if (zone.boss.res) out.push({ label: zone.boss.name, res: zone.boss.res, plural: false });
+    return out;
+  }
+
   // src/ui/render.js
   var dt = (type) => `<span class="dt dt-${type}">${type}</span>`;
   function bar(cls, value, max, label) {
@@ -3947,30 +3947,30 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const resRow = (t) => {
       const eff = effectiveRes(s, t, area);
       const low = eff < 0 ? "neg" : eff < 30 ? "low" : "";
-      return `<div class="kv"><span>${dt(t)} res</span><b class="${low}">${fmt2(eff)}% <span class="muted">/ ${s.maxRes[t]}%</span></b></div>`;
+      return `<div class="kv"><span>${dt(t)} res</span><b class="${low}">${fmt(eff)}% <span class="muted">/ ${s.maxRes[t]}%</span></b></div>`;
     };
     return `
-    <div class="level-row"><span class="level">Level ${ch.level}</span><span class="muted small">${fmt2(ch.xp)} / ${fmt2(need)} XP</span></div>
+    <div class="level-row"><span class="level">Level ${ch.level}</span><span class="muted small">${fmt(ch.xp)} / ${fmt(need)} XP</span></div>
     ${bar("xp", ch.xp, need, "")}
-    ${bar("life", Math.max(0, p.life), s.life, `Life ${fmt2(Math.max(0, p.life))} / ${fmt2(s.life)}`)}
-    ${bar("mana", p.mana, s.mana, `Mana ${fmt2(p.mana)} / ${fmt2(s.mana)}`)}
-    ${p.blight && p.blight.length ? `<div class="blight small">Blight \xD7${p.blight.length}: losing ${fmt2(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, "chaos", area) / 100))} life per second</div>` : ""}
+    ${bar("life", Math.max(0, p.life), s.life, `Life ${fmt(Math.max(0, p.life))} / ${fmt(s.life)}`)}
+    ${bar("mana", p.mana, s.mana, `Mana ${fmt(p.mana)} / ${fmt(s.mana)}`)}
+    ${p.blight && p.blight.length ? `<div class="blight small">Blight \xD7${p.blight.length}: losing ${fmt(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, "chaos", area) / 100))} life per second</div>` : ""}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? "s" : ""}` : ""}</span></h3>
-    <div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
-    <div class="kv"><span>Hit</span><b>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)}</b></div>
+    <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
+    <div class="kv"><span>Hit</span><b>${fmt(d.hitMin)}\u2013${fmt(d.hitMax)}</b></div>
     <div class="kv"><span>${s.skill.kind === "attack" ? "Attacks" : "Casts"} per second</span><b>${d.aps.toFixed(2)}</b></div>
     <div class="kv"><span>Targets per use</span><b>${d.targets}${d.splash ? ` <span class="muted">+${d.splash} splash</span>` : ""}</b></div>
     ${ailmentRows(d)}
     <div class="kv"><span>Crit chance / multiplier</span><b>${fmt1(d.critChance)}% / ${Math.round(d.critMulti * 100)}%</b></div>
     ${d.lifeCost ? `<div class="kv"><span>Life per use</span><b>${fmt1(d.manaCost)}</b></div>` : `<div class="kv"><span>Mana per second</span><b class="${d.manaPerSecond > s.manaRegen ? "low" : ""}">${fmt1(d.manaPerSecond)} <span class="muted">(regen ${fmt1(s.manaRegen)})</span></b></div>`}
     <h3>Defence</h3>
-    <div class="kv"><span>Armour</span><b>${fmt2(s.armour)}</b></div>
-    <div class="kv"><span>Evasion</span><b>${fmt2(s.evasion)}</b></div>
+    <div class="kv"><span>Armour</span><b>${fmt(s.armour)}</b></div>
+    <div class="kv"><span>Evasion</span><b>${fmt(s.evasion)}</b></div>
     <div class="kv"><span>Life regen</span><b>${fmt1(s.lifeRegen)}/s</b></div>
     ${["fire", "cold", "lightning", "chaos"].map(resRow).join("")}
     <h3>Max hit you can survive</h3>
-    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap2(t)}<b>${fmt2(mh[t])}</b></div>`).join("")}</div>
-    <div class="kv boss-ttk"><span>Time to kill ${esc(zone.boss.name)}</span><b>${fmt2(ttk)}s</b></div>
+    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap(t)}<b>${fmt(mh[t])}</b></div>`).join("")}</div>
+    <div class="kv boss-ttk"><span>Time to kill ${esc(zone.boss.name)}</span><b>${fmt(ttk)}s</b></div>
   `;
   }
   function renderRun(state2) {
@@ -3990,7 +3990,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         const tags = dead ? "" : Object.entries(m.status || {}).map(([k, v]) => STATUS[k](v)).join("");
         return `<div class="mon ${dead ? "dead" : ""} r-${m.rarity}">
         <span class="mon-name"><span class="dot dot-${m.damageType}" title="${m.damageType} damage"></span>${esc(m.name)}</span>
-        <span class="mon-bar">${bar("mlife", Math.max(0, m.life), m.maxLife, dead ? "dead" : `${fmt2(Math.max(0, m.life))}`)}${tags ? `<span class="tags">${tags}</span>` : ""}</span>${warn}</div>`;
+        <span class="mon-bar">${bar("mlife", Math.max(0, m.life), m.maxLife, dead ? "dead" : `${fmt(Math.max(0, m.life))}`)}${tags ? `<span class="tags">${tags}</span>` : ""}</span>${warn}</div>`;
       }).join("");
     } else {
       monsters = `<div class="phase">${phase}</div>`;
@@ -4023,7 +4023,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const recent = state2.runHistory.slice(-8).reverse();
     const runs = recent.length ? `<ul class="runs">${recent.map((r) => `<li><span class="zone-tag">${typeof r.zoneId === "number" ? `Z${r.zoneId}` : "Map"}</span><span class="${r.outcome === "died" ? "neg" : "good"}">${r.outcome === "died" ? "Died" : "Cleared"}</span><span class="muted">${r.outcome === "died" ? `pack ${Math.min(r.packs.length + 1, 10)}${r.bossStart != null ? " (boss)" : ""}` : `${Math.round(r.end - r.start)}s`}</span><span class="muted">+${r.items} items</span></li>`).join("")}</ul>` : '<p class="muted small">No finished runs yet.</p>';
     return `${body}<h3>Recent runs</h3>${runs}
-    <p class="muted small totals">${fmt2(state2.lifetime.kills)} kills \xB7 ${fmt2(state2.lifetime.deaths)} deaths \xB7 ${fmt2(state2.lifetime.runs)} runs</p>`;
+    <p class="muted small totals">${fmt(state2.lifetime.kills)} kills \xB7 ${fmt(state2.lifetime.deaths)} deaths \xB7 ${fmt(state2.lifetime.runs)} runs</p>`;
   }
   function itemCard(item, { equippedIn = null } = {}) {
     const b = BASES[item.baseId];
@@ -4033,7 +4033,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }).join("");
     return `<div class="item-card r-${item.rarity}">
     <div class="item-name">${esc(itemTitle(item))}${item.locked ? ' <span class="lock" title="Locked: bulk salvage skips it">locked</span>' : ""}</div>
-    <div class="item-sub">${cap2(item.rarity)} ${esc(b.name)} \xB7 ${SLOT_NAMES[b.slot]} \xB7 item level ${item.ilvl}${equippedIn ? ` \xB7 <b>equipped as ${SLOT_NAMES[equippedIn]}</b>` : ""}</div>
+    <div class="item-sub">${cap(item.rarity)} ${esc(b.name)} \xB7 ${SLOT_NAMES[b.slot]} \xB7 item level ${item.ilvl}${equippedIn ? ` \xB7 <b>equipped as ${SLOT_NAMES[equippedIn]}</b>` : ""}</div>
     <div class="item-base">${esc(baseLine(item))}</div>
     ${lines ? `<ul class="mods">${lines}</ul>` : '<div class="muted small">No mods.</div>'}
   </div>`;
@@ -4060,7 +4060,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       ["Max cold hit", mhA.cold, mhB.cold],
       ["Max lightning hit", mhA.lightning, mhB.lightning]
     ];
-    const show = (v, dec) => dec ? v.toFixed(dec) : fmt2(v);
+    const show = (v, dec) => dec ? v.toFixed(dec) : fmt(v);
     const out = rows.filter(([, a, b, , dec = 0]) => Math.abs(a - b) >= 0.5 / 10 ** dec).map(([label, a, b, unit = "", dec = 0]) => {
       const diff = b - a;
       return `<tr><td>${label}</td><td>${show(a, dec)}${unit}</td><td>${show(b, dec)}${unit}</td><td class="${diff > 0 ? "good" : "neg"}">${diff > 0 ? "+" : "\u2212"}${show(Math.abs(diff), dec)}${unit}</td></tr>`;
@@ -4077,7 +4077,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const smith = opts.length ? `<div class="smith"><label for="smith-select">The Smith adds one mod of your choice</label>
         <div class="smith-row"><select id="smith-select">${opts.map((o) => `<option value="${o.family}">${esc(MODS[o.family].name)} (${MODS[o.family].type}, T${o.tier}) \xB7 ${o.cost} Scrap</option>`).join("")}</select>
         <button data-action="smith" data-uid="${item.uid}">Craft</button></div>
-        <div class="muted small">You have ${fmt2(state2.scrap)} Scrap.${item.rarity === "normal" ? " A Normal item becomes Magic." : ""}</div></div>` : `<div class="smith muted small">The Smith can't add anything here: no open mod slots. Ash resets the item to Normal.</div>`;
+        <div class="muted small">You have ${fmt(state2.scrap)} Scrap.${item.rarity === "normal" ? " A Normal item becomes Magic." : ""}</div></div>` : `<div class="smith muted small">The Smith can't add anything here: no open mod slots. Ash resets the item to Normal.</div>`;
     let rules = "";
     if (leagueAutomationUnlocked(state2, "craftRules")) {
       const fams = Object.keys(MODS).filter((f) => MODS[f].slots.includes(BASES[item.baseId].slot) && MODS[f].tiers.some((t) => t.ilvl <= item.ilvl));
@@ -4105,9 +4105,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }
     const chips = [];
     if (Math.abs(best.dps) >= 0.01) chips.push([Math.abs(best.dps) * 3, `${best.dps > 0 ? "+" : "\u2212"}${Math.round(Math.abs(best.dps) * 100)}% DPS`, best.dps > 0]);
-    if (Math.abs(best.life) >= 1) chips.push([Math.abs(best.life) / Math.max(1, cur.life) * 3, `${best.life > 0 ? "+" : "\u2212"}${fmt2(Math.abs(best.life))} life`, best.life > 0]);
-    if (Math.abs(best.res) >= 1) chips.push([Math.abs(best.res) / 50, `${best.res > 0 ? "+" : "\u2212"}${fmt2(Math.abs(best.res))}% res`, best.res > 0]);
-    if (Math.abs(best.def) >= 1) chips.push([Math.abs(best.def) / (cur.armour + cur.evasion + 300), `${best.def > 0 ? "+" : "\u2212"}${fmt2(Math.abs(best.def))} def`, best.def > 0]);
+    if (Math.abs(best.life) >= 1) chips.push([Math.abs(best.life) / Math.max(1, cur.life) * 3, `${best.life > 0 ? "+" : "\u2212"}${fmt(Math.abs(best.life))} life`, best.life > 0]);
+    if (Math.abs(best.res) >= 1) chips.push([Math.abs(best.res) / 50, `${best.res > 0 ? "+" : "\u2212"}${fmt(Math.abs(best.res))}% res`, best.res > 0]);
+    if (Math.abs(best.def) >= 1) chips.push([Math.abs(best.def) / (cur.armour + cur.evasion + 300), `${best.def > 0 ? "+" : "\u2212"}${fmt(Math.abs(best.def))} def`, best.def > 0]);
     chips.sort((a, b) => b[0] - a[0]);
     return { ...best, chips: chips.slice(0, 3).map(([, t, good]) => `<span class="chg ${good ? "up" : "down"}">${t}</span>`).join("") };
   }
@@ -4123,7 +4123,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     </button>`;
     }).join("");
     const conv = CONVERSIONS.map((c, i) => `<button class="small-btn" data-action="convert" data-idx="${i}" ${(state2.currency[c.from] || 0) < c.amount ? "disabled" : ""}>${c.amount} ${CURRENCY[c.from].name} \u2192 1 ${CURRENCY[c.to].name}</button>`).join("");
-    const wallet = `<div class="wallet">${CURRENCY_ORDER.map((c) => `<span class="coin"><b>${state2.currency[c]}</b> ${CURRENCY[c].name}</span>`).join("")}<span class="coin scrap"><b>${fmt2(state2.scrap)}</b> Scrap</span></div><div class="conv">${conv}</div>`;
+    const wallet = `<div class="wallet">${CURRENCY_ORDER.map((c) => `<span class="coin"><b>${state2.currency[c]}</b> ${CURRENCY[c].name}</span>`).join("")}<span class="coin scrap"><b>${fmt(state2.scrap)}</b> Scrap</span></div><div class="conv">${conv}</div>`;
     const filter = ui2.filter || "all";
     const rarity = ui2.rarity || "all";
     const sort = ui2.sort || "new";
@@ -4184,7 +4184,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <h3>Inventory <span class="muted small">${state2.inventory.length} / ${RULES.inventorySize}${list.length !== state2.inventory.length ? ` \xB7 showing ${list.length}` : ""}</span></h3>
       <div class="filters">${filters}</div>
       ${controls}
-      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Locked items are skipped.</span></div>
+      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Ctrl+click an item to salvage it. Locked items are skipped.</span></div>
       <div class="inv">${rows}</div>
     </section>
     <section class="gear-right">${detail}</section>
@@ -4208,13 +4208,13 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         <tr><td>Base${s.skill.kind === "attack" ? " (weapon + added)" : ` (${s.skill.name} at level ${s.level})`}</td><td>${fmt1(p.baseMin)}\u2013${fmt1(p.baseMax)}</td></tr>
         <tr><td>\xD7 (1 + increased)</td><td>\xD7 ${(1 + p.increased / 100).toFixed(2)} <span class="muted">(${p.increased}% total)</span></td></tr>
         <tr><td>\xD7 more multipliers</td><td>\xD7 ${p.more.toFixed(2)}</td></tr>
-        <tr><td>= Damage per hit</td><td>${fmt2(p.hitMin)}\u2013${fmt2(p.hitMax)}</td></tr>
+        <tr><td>= Damage per hit</td><td>${fmt(p.hitMin)}\u2013${fmt(p.hitMax)}</td></tr>
       </tbody></table>`).join("")}
       <table class="formula"><tbody>
-        <tr><td>Total damage per hit</td><td>${fmt2(d.hitMin)}\u2013${fmt2(d.hitMax)} <span class="muted">avg ${fmt1(d.avgHit)}</span></td></tr>
+        <tr><td>Total damage per hit</td><td>${fmt(d.hitMin)}\u2013${fmt(d.hitMax)} <span class="muted">avg ${fmt1(d.avgHit)}</span></td></tr>
         <tr><td>\xD7 uses per second</td><td>\xD7 ${d.aps.toFixed(2)} <span class="muted">(base ${d.speedBase.toFixed(2)}, +${d.speedInc}%)</span></td></tr>
         <tr><td>\xD7 crit factor</td><td>\xD7 ${d.critFactor.toFixed(3)} <span class="muted">(${fmt1(d.critChance)}% \xD7 ${Math.round(d.critMulti * 100)}%)</span></td></tr>
-        <tr class="total"><td>= Damage per second (one target)</td><td>${fmt2(d.dps)}</td></tr>
+        <tr class="total"><td>= Damage per second (one target)</td><td>${fmt(d.dps)}</td></tr>
         <tr><td>Targets per use</td><td>${d.targets}${d.splash ? ` + ${d.splash} splash at ${Math.round(d.splashMult * 100)}%` : ""}</td></tr>
       </tbody></table>
       <h3>Offence sources</h3>
@@ -4231,10 +4231,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <section>
       <h3>Defence sources</h3>
       <p class="muted small">Tap a stat to see where it comes from.</p>
-      ${row("Maximum life", fmt2(s.life), "life")}
-      ${row("Maximum mana", fmt2(s.mana), "mana")}
-      ${row("Armour", fmt2(s.armour), "armour")}
-      ${row("Evasion", fmt2(s.evasion), "evasion")}
+      ${row("Maximum life", fmt(s.life), "life")}
+      ${row("Maximum mana", fmt(s.mana), "mana")}
+      ${row("Armour", fmt(s.armour), "armour")}
+      ${row("Evasion", fmt(s.evasion), "evasion")}
       ${row("Fire resistance", `${s.res.fire}%`, "fireRes", "%")}
       ${row("Cold resistance", `${s.res.cold}%`, "coldRes", "%")}
       ${row("Lightning resistance", `${s.res.lightning}%`, "lightningRes", "%")}
@@ -4251,7 +4251,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   }
   function skillSummary(st) {
     const d = st.damage;
-    return `${ailmentRows(d)}<div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
+    return `${ailmentRows(d)}<div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
     <div class="kv"><span>Targets</span><b>${d.targets}${d.splash ? ` +${d.splash} splash` : ""}</b></div>
     <div class="kv"><span>${d.lifeCost ? "Life" : "Mana"} per use</span><b>${fmt1(d.manaCost)}</b></div>`;
   }
@@ -4299,7 +4299,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       else if (free) {
         const alt = statsWithSkill(state2, { id: sk.id, supports: [...sk.supports, id] }).damage;
         const dd = alt.dps - d.dps;
-        note = `If added: ${fmt2(d.dps)} \u2192 <b>${fmt2(alt.dps)}</b> DPS <span class="${dd >= 0 ? "good" : "neg"}">(${dd >= 0 ? "+" : "\u2212"}${fmt2(Math.abs(dd))})</span>${alt.targets !== d.targets ? `, ${alt.targets} targets` : ""}, ${fmt1(alt.manaCost)} mana per use`;
+        note = `If added: ${fmt(d.dps)} \u2192 <b>${fmt(alt.dps)}</b> DPS <span class="${dd >= 0 ? "good" : "neg"}">(${dd >= 0 ? "+" : "\u2212"}${fmt(Math.abs(dd))})</span>${alt.targets !== d.targets ? `, ${alt.targets} targets` : ""}, ${fmt1(alt.manaCost)} mana per use`;
       } else note = '<span class="muted">No free link slot</span>';
       return `<li class="${have ? "" : "unowned"}"><b>${S.name}</b> <span class="small">${esc(S.text)} \xB7 mana \xD7${S.manaMult}${S.requires ? ` \xB7 ${S.requires.join("/")} only` : ""}${S.needs ? ` \xB7 needs ${S.needs}` : ""}</span><div class="small">${note}</div></li>`;
     }).join("");
@@ -4312,7 +4312,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <h3>Linked supports <span class="muted small">${sk.supports.length} / ${slots}</span></h3>
       <div class="links">${linkRows.join("")}</div>
       <div class="link-total">
-        <div class="kv"><span>Damage per second</span><b>${fmt2(d.dps)}</b></div>
+        <div class="kv"><span>Damage per second</span><b>${fmt(d.dps)}</b></div>
         <div class="kv"><span>Uses per second</span><b>${d.aps.toFixed(2)}</b></div>
         <div class="kv"><span>Targets</span><b>${d.targets}${d.splash ? ` +${d.splash} splash` : ""}</b></div>
         <div class="kv"><span>${d.lifeCost ? "Life" : "Mana"} per use</span><b>${fmt1(d.manaCost)} <span class="muted">(base ${SKILLS[sk.id].manaCost} \xD7 ${d.manaMult.toFixed(2)})</span></b></div>
@@ -4377,7 +4377,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <ul class="small tree-help">
       <li>You get 1 point per level, plus 2 each for first clearing zones 5 and 10.</li>
       <li>Bridges between regions let you mix, e.g. attacks with life, or crits with spells.</li>
-      <li>A node can be taken once it touches one you already have.</li>
+      <li>A node can be taken once it touches one you already have. <b>Ctrl+click</b> a node to allocate it straight away.</li>
       <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
       <li>Refunding a node costs ${refundCost(state2)} Scrap at your level.</li>
     </ul>`;
@@ -4390,7 +4390,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       const typeName = { origin: "Starting point", small: "Passive", notable: "Notable", keystone: "Keystone" }[sel.type];
       const btn = sel.type === "origin" ? "" : on ? `<button data-action="refund" data-node="${sel.id}" ${reason ? "disabled" : ""}>Refund (${refundCost(state2)} Scrap)</button>` : `<button class="primary" data-action="allocate" data-node="${sel.id}" ${reason ? "disabled" : ""}>Allocate (1 point)</button>`;
       detail = `<div class="node-card t-${sel.type}">
-        <div class="muted small">${typeName}${sel.region ? ` \xB7 ${cap2(sel.region)}` : ""}${on ? ' \xB7 <span class="good">allocated</span>' : ""}</div>
+        <div class="muted small">${typeName}${sel.region ? ` \xB7 ${cap(sel.region)}` : ""}${on ? ' \xB7 <span class="good">allocated</span>' : ""}</div>
         <div class="item-name">${esc(sel.type === "small" ? "Passive" : sel.name)}</div>
         <ul class="mods">${nodeLines(sel).map((l) => `<li>${esc(l)}</li>`).join("") || '<li class="muted">Where every build begins.</li>'}</ul>
       </div>
@@ -4401,7 +4401,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return `<div class="tree-grid">
     <section class="tree-wrap">
       <div class="tree-head"><b class="${free > 0 ? "good" : ""}">${free} point${free === 1 ? "" : "s"} to spend</b><span class="muted small">${spent} of ${points} used \xB7 ${Object.keys(PASSIVES).length - 1} nodes in the tree</span></div>
-      <div class="tree-zoom"><button class="small-btn" data-action="tree-zoom" data-dir="in" aria-label="Zoom in">+</button><button class="small-btn" data-action="tree-zoom" data-dir="out" aria-label="Zoom out">\u2212</button><button class="small-btn" data-action="tree-zoom" data-dir="fit">Fit</button><span class="muted small">Drag to move \xB7 scroll to zoom</span></div>
+      <div class="tree-zoom"><button class="small-btn" data-action="tree-zoom" data-dir="in" aria-label="Zoom in">+</button><button class="small-btn" data-action="tree-zoom" data-dir="out" aria-label="Zoom out">\u2212</button><button class="small-btn" data-action="tree-zoom" data-dir="fit">Fit</button><span class="muted small">Drag to move \xB7 scroll to zoom \xB7 Ctrl+click to allocate</span></div>
       <svg class="tree" id="tree-svg" viewBox="${ui2.treeView ? ui2.treeView.join(" ") : `${minX} ${minY} ${w} ${h}`}" data-full="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join("")}${regionLabels}${nodes}</svg>
     </section>
     <section class="tree-detail">${detail}</section>
@@ -4451,7 +4451,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const iiq = mapIiq(m);
     return `<button class="inv-row ${selected ? "selected" : ""}" data-action="select-map" data-uid="${m.uid}">
     <span class="r-${m.rarity} inv-name">Tier ${m.tier} \xB7 ${esc(L2.name)}</span>
-    <span class="muted small">${cap2(m.rarity)}${iiq ? ` \xB7 +${iiq}% items` : ""}</span>
+    <span class="muted small">${cap(m.rarity)}${iiq ? ` \xB7 +${iiq}% items` : ""}</span>
     <span class="inv-mods small">${m.mods.map((id) => MAP_MODS[id].name).join(" \xB7 ") || '<span class="muted">no mods</span>'}</span></button>`;
   }
   function renderMaps(state2, ui2) {
@@ -4484,7 +4484,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       }).join("");
       detail = `<div class="item-card r-${sel.rarity}">
         <div class="item-name">${esc(L2.name)}</div>
-        <div class="item-sub">${cap2(sel.rarity)} map \xB7 tier ${sel.tier} \xB7 monster level ${mapLevel(sel.tier)} \xB7 monsters resist elements ${MAP_RULES.eleRes(sel.tier)}%</div>
+        <div class="item-sub">${cap(sel.rarity)} map \xB7 tier ${sel.tier} \xB7 monster level ${mapLevel(sel.tier)} \xB7 monsters resist elements ${MAP_RULES.eleRes(sel.tier)}%</div>
         <div class="item-base">${mix}</div>
         <div class="item-base">Boss: ${esc(L2.boss.name)} (${L2.boss.damageType})</div>
         <ul class="mods">${sel.mods.map((id) => `<li><b>${MAP_MODS[id].name}</b>&nbsp;${esc(MAP_MODS[id].text)} <span class="muted small">+${MAP_MODS[id].iiq}% items</span></li>`).join("") || '<li class="muted">No mods. Kindling or Forge adds some: harder, but more loot.</li>'}</ul>
@@ -4697,7 +4697,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     }
     render();
   }
-  function handle(action, el) {
+  function handle(action, el, event = null) {
+    const quick = !!(event && (event.ctrlKey || event.metaKey));
     const uid = el.dataset.uid ? Number(el.dataset.uid) : null;
     let res;
     switch (action) {
@@ -4710,11 +4711,25 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       case "tab":
         ui.tab = el.dataset.tab;
         break;
-      case "select":
+      case "select": {
+        const f = quick ? findItem(state, uid) : null;
+        if (f && f.where === "inventory") {
+          if (f.item.locked) {
+            notify("That item is locked. Unlock it to salvage.", "neg");
+            break;
+          }
+          res = salvage(state, uid);
+          if (res.ok) {
+            if (ui.selectedUid === uid) ui.selectedUid = null;
+            notify(`Salvaged ${itemTitle(f.item)} for ${res.scrap} Scrap.`, "good");
+          }
+          break;
+        }
         ui.selectedUid = uid;
         ui.compareSlot = null;
         ui.message = "";
         break;
+      }
       case "filter":
         ui.filter = el.dataset.filter;
         break;
@@ -4777,6 +4792,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       case "node":
         if (ui.dragged) return;
         ui.selectedNode = el.dataset.node;
+        if (quick) {
+          res = allocatePassive(state, el.dataset.node);
+          if (res.ok) notify("Passive allocated.", "good");
+        }
         break;
       case "tree-zoom": {
         const svg = $("tree-svg");
@@ -4989,14 +5008,14 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     document.addEventListener("click", (e) => {
       const el = e.target.closest("[data-action]");
       if (!el || el.disabled) return;
-      handle(el.dataset.action, el);
+      handle(el.dataset.action, el, e);
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       const el = e.target.closest("g[data-action]");
       if (!el) return;
       e.preventDefault();
-      handle(el.dataset.action, el);
+      handle(el.dataset.action, el, e);
     });
     document.addEventListener("input", (e) => {
       const el = e.target.closest("[data-input]");

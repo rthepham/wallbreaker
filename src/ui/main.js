@@ -7,6 +7,7 @@ import {
 } from '../game.js';
 import { CURRENCY } from '../data/currency.js';
 import { SKILLS } from '../data/skills.js';
+import { itemTitle } from './format.js';
 import {
   renderZones, renderVitals, renderRun, renderLog, renderDiagnosis, renderGear, renderSheet, renderSkills, renderTree, renderAutomation, renderMaps, renderLeague,
 } from './render.js';
@@ -163,7 +164,9 @@ function loop() {
 
 // ---------- Input ----------
 
-function handle(action, el) {
+function handle(action, el, event = null) {
+  // Ctrl+click (Cmd+click on Mac) is a shortcut: salvage an item, allocate a node.
+  const quick = !!(event && (event.ctrlKey || event.metaKey));
   const uid = el.dataset.uid ? Number(el.dataset.uid) : null;
   let res;
   switch (action) {
@@ -176,11 +179,25 @@ function handle(action, el) {
     case 'tab':
       ui.tab = el.dataset.tab;
       break;
-    case 'select':
+    case 'select': {
+      const f = quick ? findItem(state, uid) : null;
+      if (f && f.where === 'inventory') {
+        if (f.item.locked) {
+          notify('That item is locked. Unlock it to salvage.', 'neg');
+          break;
+        }
+        res = salvage(state, uid);
+        if (res.ok) {
+          if (ui.selectedUid === uid) ui.selectedUid = null;
+          notify(`Salvaged ${itemTitle(f.item)} for ${res.scrap} Scrap.`, 'good');
+        }
+        break;
+      }
       ui.selectedUid = uid;
       ui.compareSlot = null;
       ui.message = '';
       break;
+    }
     case 'filter':
       ui.filter = el.dataset.filter;
       break;
@@ -243,6 +260,10 @@ function handle(action, el) {
     case 'node':
       if (ui.dragged) return;
       ui.selectedNode = el.dataset.node;
+      if (quick) {
+        res = allocatePassive(state, el.dataset.node);
+        if (res.ok) notify('Passive allocated.', 'good');
+      }
       break;
     case 'tree-zoom': {
       const svg = $('tree-svg');
@@ -449,7 +470,7 @@ function wire() {
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el || el.disabled) return;
-    handle(el.dataset.action, el);
+    handle(el.dataset.action, el, e);
   });
   // Tree nodes are SVG groups, so make Enter and Space work like a click.
   document.addEventListener('keydown', (e) => {
@@ -457,7 +478,7 @@ function wire() {
     const el = e.target.closest('g[data-action]');
     if (!el) return;
     e.preventDefault();
-    handle(el.dataset.action, el);
+    handle(el.dataset.action, el, e);
   });
   document.addEventListener('input', (e) => {
     const el = e.target.closest('[data-input]');

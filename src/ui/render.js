@@ -372,7 +372,7 @@ export function renderGear(state, ui) {
       <h3>Inventory <span class="muted small">${state.inventory.length} / ${RULES.inventorySize}${list.length !== state.inventory.length ? ` · showing ${list.length}` : ''}</span></h3>
       <div class="filters">${filters}</div>
       ${controls}
-      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Locked items are skipped.</span></div>
+      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Ctrl+click an item to salvage it. Locked items are skipped.</span></div>
       <div class="inv">${rows}</div>
     </section>
     <section class="gear-right">${detail}</section>
@@ -592,7 +592,7 @@ export function renderTree(state, ui) {
     <ul class="small tree-help">
       <li>You get 1 point per level, plus 2 each for first clearing zones 5 and 10.</li>
       <li>Bridges between regions let you mix, e.g. attacks with life, or crits with spells.</li>
-      <li>A node can be taken once it touches one you already have.</li>
+      <li>A node can be taken once it touches one you already have. <b>Ctrl+click</b> a node to allocate it straight away.</li>
       <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
       <li>Refunding a node costs ${refundCost(state)} Scrap at your level.</li>
     </ul>`;
@@ -619,7 +619,7 @@ export function renderTree(state, ui) {
   return `<div class="tree-grid">
     <section class="tree-wrap">
       <div class="tree-head"><b class="${free > 0 ? 'good' : ''}">${free} point${free === 1 ? '' : 's'} to spend</b><span class="muted small">${spent} of ${points} used · ${Object.keys(PASSIVES).length - 1} nodes in the tree</span></div>
-      <div class="tree-zoom"><button class="small-btn" data-action="tree-zoom" data-dir="in" aria-label="Zoom in">+</button><button class="small-btn" data-action="tree-zoom" data-dir="out" aria-label="Zoom out">−</button><button class="small-btn" data-action="tree-zoom" data-dir="fit">Fit</button><span class="muted small">Drag to move · scroll to zoom</span></div>
+      <div class="tree-zoom"><button class="small-btn" data-action="tree-zoom" data-dir="in" aria-label="Zoom in">+</button><button class="small-btn" data-action="tree-zoom" data-dir="out" aria-label="Zoom out">−</button><button class="small-btn" data-action="tree-zoom" data-dir="fit">Fit</button><span class="muted small">Drag to move · scroll to zoom · Ctrl+click to allocate</span></div>
       <svg class="tree" id="tree-svg" viewBox="${ui.treeView ? ui.treeView.join(' ') : `${minX} ${minY} ${w} ${h}`}" data-full="${minX} ${minY} ${w} ${h}" role="group" aria-label="Passive tree">${edges.join('')}${regionLabels}${nodes}</svg>
     </section>
     <section class="tree-detail">${detail}</section>
