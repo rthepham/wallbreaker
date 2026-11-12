@@ -392,7 +392,8 @@ function playerAttack(state, s) {
     const roll = r.next();
     const crit = r.chance(d.critChance / 100);
     const shock = m.status.shock ? 1 + m.status.shock.effect / 100 : 1;
-    const base = mult * lowLife * (crit ? d.critMulti : 1) * shock;
+    const execute = d.executeMore && m.life < m.maxLife * 0.35 ? 1 + d.executeMore / 100 : 1;
+    const base = mult * lowLife * (crit ? d.critMulti : 1) * shock * execute;
     // Each damage type is reduced by the monster's resistance to it.
     const byType = {};
     let total = 0;
@@ -453,7 +454,7 @@ function monsterHit(state, s, m, mult, isBig = false) {
       log(state, 'evade', `Evaded ${m.name}'s attack.`);
       return;
     }
-    taken = raw * (1 - armourReduction(s.armour, raw));
+    taken = damageTaken(s, 'physical', raw, state.run.zoneId);
   } else {
     taken = damageTaken(s, type, raw, state.run.zoneId);
   }
@@ -485,6 +486,8 @@ function monsterHit(state, s, m, mult, isBig = false) {
 
 function monsterKilled(state, m) {
   state.lifetime.kills++;
+  const ks = getStats(state);
+  if (ks.damage.lifeOnKillPct) state.player.life = Math.min(ks.life, state.player.life + ks.life * ks.damage.lifeOnKillPct / 100);
   const rec = state.run.record;
   // XP with over-level penalty.
   const L = state.character.level;

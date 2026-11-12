@@ -159,3 +159,57 @@ test('version 3 saves move the ring into Ring 1 and gain the new slots', () => {
   assert.deepEqual(m.character.passives, ['origin']);
   assert.ok(m.notice);
 });
+
+// ---------- Supports added later ----------
+import { SUPPORTS, SUPPORT_ORDER } from '../src/data/skills.js';
+import { maxHitTaken, damageTaken } from '../src/stats.js';
+
+const S = (id, supports, level = 20) => computeStats(char({ id, supports }, level));
+
+test('there are 20 supports and every one is listed', () => {
+  assert.equal(SUPPORT_ORDER.length, 20);
+  for (const id of SUPPORT_ORDER) assert.ok(SUPPORTS[id], id);
+});
+
+test('element supports: Kindle, Overcharge, Frostbite, Elemental Fury', () => {
+  assert.equal(S('fireball', ['kindle']).damage.ailments.igniteChance, S('fireball', []).damage.ailments.igniteChance + 25);
+  assert.ok(S('arc', ['overcharge']).damage.ailments.shockEffect > S('arc', []).damage.ailments.shockEffect);
+  near(S('ice_nova', ['frostbite']).damage.dps, S('ice_nova', []).damage.dps * 1.2, 'frostbite dps');
+  near(S('arc', ['elemental_fury']).damage.dps, S('arc', []).damage.dps * 1.3, 'fury on arc');
+  near(S('cleave', ['elemental_fury']).damage.dps, S('cleave', []).damage.dps, 'fury does nothing for physical');
+});
+
+test('Controlled Destruction: more spell damage, no crits; spells only', () => {
+  const b = S('arc', ['controlled_destruction']).damage;
+  assert.equal(b.critChance, 0);
+  assert.equal(supportFits('controlled_destruction', 'cleave'), false);
+});
+
+test('Swift Assault speeds attacks only; Scatter adds splash to Fireball', () => {
+  near(S('cleave', ['swift_assault']).damage.aps, S('cleave', []).damage.aps * 1.25, 'speed');
+  assert.equal(supportFits('swift_assault', 'arc'), false);
+  const sc = S('fireball', ['scatter']).damage;
+  assert.equal(sc.splash, 4);
+  near(sc.splashMult, 0.75, 'splash share');
+  assert.equal(supportFits('scatter', 'cleave'), false);
+});
+
+test('Efficacy halves the cost problem; Iron Will reduces damage taken', () => {
+  near(S('arc', ['efficacy']).damage.manaCost, Math.round(5 * 0.7 * 10) / 10, 'cost');
+  const a = S('cleave', []);
+  const b = S('cleave', ['iron_will']);
+  near(damageTaken(b, 'fire', 100, 1), damageTaken(a, 'fire', 100, 1) * 0.9, 'fire taken');
+  assert.ok(maxHitTaken(b, 1).physical > maxHitTaken(a, 1).physical);
+});
+
+test('Executioner and Lifetap work in combat', () => {
+  const g = newGame(9);
+  g.ownedSupports.push('executioner', 'lifetap');
+  setSupport(g, 0, 'lifetap');
+  assert.equal(getStats(g).damage.lifeOnKillPct, 3);
+  startRun(g, 1);
+  runTicks(g, 600);
+  assert.ok(g.lifetime.kills > 0);
+  setSupport(g, 0, 'executioner');
+  assert.equal(getStats(g).damage.executeMore, 60);
+});

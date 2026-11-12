@@ -3,7 +3,7 @@
 Built: milestones M0–M12 in prototype form.
 - Zones 1–10 (Swarm, Brute, fire/cold/lightning Casters, Blight), resistance penalty from zone 6.
 - 8 gear slots, 7 item types, wands, ~30 mod families; inventory filters, sort, search, change chips.
-- 4 skills, 9 supports, element effects (ignite, shock, chill, stun), monster resistances.
+- 4 skills, 20 supports, element effects (ignite, shock, chill, stun), monster resistances.
 - Passive tree: 139 nodes, 9 keystones, region bridges, zoom/pan.
 - Maps: 16 tiers, 5 layouts, 6 map mods, map crafting, sustain, map runner.
 - Offline progress (50%, 8h cap), save export/import.

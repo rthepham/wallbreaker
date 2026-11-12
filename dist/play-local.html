@@ -1421,6 +1421,95 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       text: "Hits ignore 25% of enemy elemental resistance",
       mods: [{ stat: "penetration", kind: "flat", value: 25 }]
     },
+    kindle: {
+      name: "Kindle",
+      manaMult: 1.2,
+      requires: null,
+      needs: "fire damage",
+      text: "+25% ignite chance, burning deals 40% more",
+      mods: [{ stat: "igniteChance", kind: "flat", value: 25 }, { stat: "ignite", kind: "increased", value: 40 }]
+    },
+    overcharge: {
+      name: "Overcharge",
+      manaMult: 1.2,
+      requires: null,
+      needs: "lightning damage",
+      text: "+25% shock chance, shocks are 40% stronger",
+      mods: [{ stat: "shockChance", kind: "flat", value: 25 }, { stat: "shock", kind: "increased", value: 40 }]
+    },
+    frostbite: {
+      name: "Frostbite",
+      manaMult: 1.2,
+      requires: null,
+      needs: "cold damage",
+      text: "Chills are 50% stronger, 20% more cold damage",
+      mods: [{ stat: "chill", kind: "increased", value: 50 }, { stat: "cold", kind: "more", value: 20 }]
+    },
+    concussive_force: {
+      name: "Concussive Force",
+      manaMult: 1.3,
+      requires: null,
+      needs: "physical damage",
+      text: "Stuns twice as easily, 20% more physical damage",
+      mods: [{ stat: "stun", kind: "increased", value: 100 }, { stat: "physical", kind: "more", value: 20 }]
+    },
+    elemental_fury: {
+      name: "Elemental Fury",
+      manaMult: 1.4,
+      requires: null,
+      needs: "elemental damage",
+      text: "30% more elemental damage",
+      mods: [{ stat: "elemental", kind: "more", value: 30 }]
+    },
+    controlled_destruction: {
+      name: "Controlled Destruction",
+      manaMult: 1.3,
+      requires: ["Spell"],
+      text: "35% more spell damage, but you never crit",
+      mods: [{ stat: "spell", kind: "more", value: 35 }, { stat: "noCrit", kind: "flat", value: 1 }]
+    },
+    swift_assault: {
+      name: "Swift Assault",
+      manaMult: 1.4,
+      requires: ["Attack"],
+      text: "25% more attack speed",
+      mods: [{ stat: "attackSpeed", kind: "more", value: 25 }]
+    },
+    scatter: {
+      name: "Scatter",
+      manaMult: 1.3,
+      requires: ["Projectile"],
+      text: "+2 splash targets, splash deals 25% more of the hit",
+      mods: [{ stat: "splash", kind: "flat", value: 2 }, { stat: "splashMultPct", kind: "flat", value: 25 }]
+    },
+    executioner: {
+      name: "Executioner",
+      manaMult: 1.3,
+      requires: null,
+      text: "60% more damage to enemies below 35% life",
+      mods: [{ stat: "executeMore", kind: "flat", value: 60 }]
+    },
+    efficacy: {
+      name: "Efficacy",
+      manaMult: 0.7,
+      requires: null,
+      text: "30% lower mana cost, 10% less damage",
+      mods: [{ stat: "damage", kind: "more", value: -10 }]
+    },
+    iron_will: {
+      name: "Iron Will",
+      manaMult: 1.3,
+      requires: null,
+      text: "+30% armour, and you take 10% less damage",
+      mods: [{ stat: "armour", kind: "increased", value: 30 }, { stat: "lessDamageTaken", kind: "flat", value: 10 }]
+    },
+    lifetap: {
+      name: "Lifetap",
+      manaMult: 1.2,
+      requires: null,
+      text: "Recover 3% of maximum life on each kill",
+      mods: [{ stat: "lifeOnKillPct", kind: "flat", value: 3 }]
+    },
     focused_strike: {
       name: "Focused Strike",
       manaMult: 1.4,
@@ -1429,7 +1518,28 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       mods: [{ stat: "damage", kind: "more", value: 60 }, { stat: "singleTarget", kind: "flat", value: 1 }]
     }
   };
-  var SUPPORT_ORDER = ["brutality", "wide_arc", "searing_edge", "precision", "bloodthirst", "echo", "pierce", "focused_strike"];
+  var SUPPORT_ORDER = [
+    "brutality",
+    "wide_arc",
+    "searing_edge",
+    "precision",
+    "bloodthirst",
+    "echo",
+    "pierce",
+    "focused_strike",
+    "kindle",
+    "overcharge",
+    "frostbite",
+    "concussive_force",
+    "elemental_fury",
+    "controlled_destruction",
+    "swift_assault",
+    "scatter",
+    "executioner",
+    "efficacy",
+    "iron_will",
+    "lifetap"
+  ];
   var LINKS = {
     base: 2,
     // DOC: doc unlocks the 3rd link at zone 6 and the 4th at map tier 1.
@@ -1438,7 +1548,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     startingSupports: ["brutality"],
     // Chance a repeat boss kill drops a support you don't own.
     // A zone's first clear always gives one.
-    bossDropChance: 0.25
+    // Raised from 0.25 when the support count went from 8 to 20.
+    bossDropChance: 0.35
   };
   function supportFits(supportId, skillId) {
     const req = SUPPORTS[supportId].requires;
@@ -1947,10 +2058,11 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return Math.min(raw - penalty, stats.maxRes[type] - maxMinus);
   }
   function damageTaken(stats, type, hit, zoneId) {
-    if (type === "physical") return hit * (1 - armourReduction(stats.armour, hit));
+    const less = 1 - (stats.lessDamageTaken || 0) / 100;
+    if (type === "physical") return hit * (1 - armourReduction(stats.armour, hit)) * less;
     let taken = hit * (1 - effectiveRes(stats, type, zoneId) / 100);
     if (stats.armourVsEle > 0 && type !== "chaos") taken *= 1 - armourReduction(stats.armour, hit) * stats.armourVsEle;
-    return taken;
+    return taken * less;
   }
   function maxHitTaken(stats, zoneId) {
     const out = {};
@@ -2027,7 +2139,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       if (from) increased += inc(from);
       const isEle = (t) => t === "fire" || t === "cold" || t === "lightning";
       if (isEle(type) || from && isEle(from)) increased += inc("elemental");
-      const m = moreAll * more(type);
+      const m = moreAll * more(type) * (isEle(type) ? more("elemental") : 1);
       const pMin = lo * (1 + increased / 100) * m;
       const pMax = hi * (1 + increased / 100) * m;
       parts.push({ type, baseMin: lo, baseMax: hi, increased, more: m, hitMin: pMin, hitMax: pMax, convertedFrom: from || null });
@@ -2037,7 +2149,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const mainPart = parts.reduce((a, b) => b.hitMax > a.hitMax ? b : a, parts[0]);
     const speedBase = isAttack ? wb.aps : skill.castRate;
     const speedInc = isAttack ? inc("attackSpeed") : inc("castSpeed");
-    const aps = speedBase * (1 + speedInc / 100) * more("speed");
+    const aps = speedBase * (1 + speedInc / 100) * more("speed") * (isAttack ? more("attackSpeed") : more("castSpeed"));
     const critBase = isAttack ? wb.crit : skill.crit;
     const noCrit = flat("noCrit") > 0;
     const critChance = noCrit ? 0 : Math.min(100, (critBase + flat("critChance")) * (1 + inc("critChance") / 100));
@@ -2048,8 +2160,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const single = flat("singleTarget") > 0;
     const targetMult = 1 + flat("targetMultPct") / 100;
     const targets = single ? 1 : Math.round((skill.targets + flat("targets")) * targetMult);
-    const splash = single ? 0 : Math.round((skill.splash || 0) * targetMult);
-    const splashMult = skill.splashMult || 0;
+    const splash = single ? 0 : Math.round(((skill.splash || 0) + flat("splash")) * targetMult);
+    const splashMult = Math.min(1, (skill.splashMult || 0.5) + flat("splashMultPct") / 100);
     const supportIds = character.skill && character.skill.supports || [];
     const manaMult = supportIds.reduce((a, id) => a * SUPPORTS[id].manaMult, 1);
     const manaCost = Math.round(skill.manaCost * manaMult * 10) / 10;
@@ -2081,6 +2193,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       armourVsEle,
       cannotEvade,
       noRegen,
+      lessDamageTaken: Math.min(50, flat("lessDamageTaken")),
       keystones: (character.passives || []).filter((id) => PASSIVES[id] && PASSIVES[id].type === "keystone"),
       skill: { id: skillId, name: skill.name, kind: skill.kind, damageType: mainPart.type, tags: skill.tags, supports: supportIds },
       damage: {
@@ -2112,7 +2225,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         lowLifeMore,
         ailments,
         penetration,
-        firePenetration
+        firePenetration,
+        executeMore: flat("executeMore"),
+        lifeOnKillPct: flat("lifeOnKillPct")
       },
       sources: {
         life: sources("life"),
@@ -2689,7 +2804,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       const roll = r.next();
       const crit = r.chance(d.critChance / 100);
       const shock = m.status.shock ? 1 + m.status.shock.effect / 100 : 1;
-      const base = mult * lowLife * (crit ? d.critMulti : 1) * shock;
+      const execute = d.executeMore && m.life < m.maxLife * 0.35 ? 1 + d.executeMore / 100 : 1;
+      const base = mult * lowLife * (crit ? d.critMulti : 1) * shock * execute;
       const byType = {};
       let total = 0;
       for (const p of d.parts) {
@@ -2748,7 +2864,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         log(state2, "evade", `Evaded ${m.name}'s attack.`);
         return;
       }
-      taken = raw * (1 - armourReduction(s.armour, raw));
+      taken = damageTaken(s, "physical", raw, state2.run.zoneId);
     } else {
       taken = damageTaken(s, type, raw, state2.run.zoneId);
     }
@@ -2783,6 +2899,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   }
   function monsterKilled(state2, m) {
     state2.lifetime.kills++;
+    const ks = getStats(state2);
+    if (ks.damage.lifeOnKillPct) state2.player.life = Math.min(ks.life, state2.player.life + ks.life * ks.damage.lifeOnKillPct / 100);
     const rec = state2.run.record;
     const L2 = state2.character.level;
     let xp = MONSTERS.xpBase * MONSTERS.xpGrowth ** m.level * m.xpMult;
@@ -4185,7 +4303,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         const dd = alt.dps - d.dps;
         note = `If added: ${fmt2(d.dps)} \u2192 <b>${fmt2(alt.dps)}</b> DPS <span class="${dd >= 0 ? "good" : "neg"}">(${dd >= 0 ? "+" : "\u2212"}${fmt2(Math.abs(dd))})</span>${alt.targets !== d.targets ? `, ${alt.targets} targets` : ""}, ${fmt1(alt.manaCost)} mana per use`;
       } else note = '<span class="muted">No free link slot</span>';
-      return `<li class="${have ? "" : "unowned"}"><b>${S.name}</b> <span class="small">${esc(S.text)} \xB7 mana \xD7${S.manaMult}${S.requires ? ` \xB7 ${S.requires.join("/")} only` : ""}</span><div class="small">${note}</div></li>`;
+      return `<li class="${have ? "" : "unowned"}"><b>${S.name}</b> <span class="small">${esc(S.text)} \xB7 mana \xD7${S.manaMult}${S.requires ? ` \xB7 ${S.requires.join("/")} only` : ""}${S.needs ? ` \xB7 needs ${S.needs}` : ""}</span><div class="small">${note}</div></li>`;
     }).join("");
     return `<div class="skills-grid">
     <section>

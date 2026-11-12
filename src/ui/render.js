@@ -503,7 +503,7 @@ export function renderSkills(state) {
       const dd = alt.dps - d.dps;
       note = `If added: ${fmt(d.dps)} → <b>${fmt(alt.dps)}</b> DPS <span class="${dd >= 0 ? 'good' : 'neg'}">(${dd >= 0 ? '+' : '−'}${fmt(Math.abs(dd))})</span>${alt.targets !== d.targets ? `, ${alt.targets} targets` : ''}, ${fmt1(alt.manaCost)} mana per use`;
     } else note = '<span class="muted">No free link slot</span>';
-    return `<li class="${have ? '' : 'unowned'}"><b>${S.name}</b> <span class="small">${esc(S.text)} · mana ×${S.manaMult}${S.requires ? ` · ${S.requires.join('/')} only` : ''}</span><div class="small">${note}</div></li>`;
+    return `<li class="${have ? '' : 'unowned'}"><b>${S.name}</b> <span class="small">${esc(S.text)} · mana ×${S.manaMult}${S.requires ? ` · ${S.requires.join('/')} only` : ''}${S.needs ? ` · needs ${S.needs}` : ''}</span><div class="small">${note}</div></li>`;
   }).join('');
 
   return `<div class="skills-grid">
