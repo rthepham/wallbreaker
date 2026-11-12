@@ -824,7 +824,8 @@ export function salvageAll(state, rarity) {
   let total = 0;
   let count = 0;
   state.inventory = state.inventory.filter((it) => {
-    if (it.rarity !== rarity || it.locked) return true;
+    // rarity 'all' salvages every unlocked item.
+    if (it.locked || (rarity !== 'all' && it.rarity !== rarity)) return true;
     total += salvageValue(it);
     count++;
     return false;

@@ -3206,7 +3206,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     let total = 0;
     let count = 0;
     state2.inventory = state2.inventory.filter((it) => {
-      if (it.rarity !== rarity || it.locked) return true;
+      if (it.locked || rarity !== "all" && it.rarity !== rarity) return true;
       total += salvageValue(it);
       count++;
       return false;
@@ -4140,6 +4140,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       type: (a, b) => ITEM_TYPES.indexOf(BASES[a.it.baseId].slot) - ITEM_TYPES.indexOf(BASES[b.it.baseId].slot) || b.idx - a.idx
     };
     list.sort(sorters[sort] || sorters.new);
+    const unlocked = state2.inventory.filter((i) => !i.locked);
     const advisor = leagueAutomationUnlocked(state2, "upgradeAdvisor");
     const counts = {};
     for (const it of state2.inventory) counts[BASES[it.baseId].slot] = (counts[BASES[it.baseId].slot] || 0) + 1;
@@ -4186,7 +4187,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <h3>Inventory <span class="muted small">${state2.inventory.length} / ${RULES.inventorySize}${list.length !== state2.inventory.length ? ` \xB7 showing ${list.length}` : ""}</span></h3>
       <div class="filters">${filters}</div>
       ${controls}
-      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Ctrl+click an item to salvage it. Locked items are skipped.</span></div>
+      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><button class="small-btn" data-action="salvage-everything-ask" ${unlocked.length ? "" : "disabled"}>Salvage all</button><span class="muted small">Ctrl+click an item to salvage it. Locked items are skipped.</span></div>
+      ${ui2.confirmSalvageAll && unlocked.length ? `<div class="reset-confirm"><span>Salvage all ${unlocked.length} unlocked item${unlocked.length === 1 ? "" : "s"} for ${unlocked.reduce((a, i) => a + salvageValue(i), 0)} Scrap?</span><button class="danger" data-action="salvage-everything">Salvage them</button><button data-action="salvage-everything-cancel">Cancel</button></div>` : ""}
       <div class="inv">${rows}</div>
     </section>
     <section class="gear-right">${detail}</section>
@@ -4763,6 +4765,19 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         res = salvageAll(state, el.dataset.rarity);
         if (ui.selectedUid != null && !findItem(state, ui.selectedUid)) ui.selectedUid = null;
         notify(res.count ? `Salvaged ${res.count} items for ${res.scrap} Scrap.` : "Nothing to salvage. Locked items are skipped.");
+        break;
+      }
+      case "salvage-everything-ask":
+        ui.confirmSalvageAll = true;
+        break;
+      case "salvage-everything-cancel":
+        ui.confirmSalvageAll = false;
+        break;
+      case "salvage-everything": {
+        ui.confirmSalvageAll = false;
+        res = salvageAll(state, "all");
+        if (ui.selectedUid != null && !findItem(state, ui.selectedUid)) ui.selectedUid = null;
+        notify(`Salvaged ${res.count} items for ${res.scrap} Scrap.`, "good");
         break;
       }
       case "lock":

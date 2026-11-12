@@ -231,6 +231,19 @@ function handle(action, el, event = null) {
       notify(res.count ? `Salvaged ${res.count} items for ${res.scrap} Scrap.` : 'Nothing to salvage. Locked items are skipped.');
       break;
     }
+    case 'salvage-everything-ask':
+      ui.confirmSalvageAll = true;
+      break;
+    case 'salvage-everything-cancel':
+      ui.confirmSalvageAll = false;
+      break;
+    case 'salvage-everything': {
+      ui.confirmSalvageAll = false;
+      res = salvageAll(state, 'all');
+      if (ui.selectedUid != null && !findItem(state, ui.selectedUid)) ui.selectedUid = null;
+      notify(`Salvaged ${res.count} items for ${res.scrap} Scrap.`, 'good');
+      break;
+    }
     case 'lock':
       res = toggleLock(state, uid);
       break;

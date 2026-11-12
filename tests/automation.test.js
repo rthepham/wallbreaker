@@ -45,3 +45,14 @@ test('older saves get default automation settings', () => {
   delete data.automation;
   assert.ok(migrate(data).automation.keepFamilies.length);
 });
+
+test('salvage all keeps locked items and pays Scrap for the rest', async () => {
+  const { salvageAll } = await import('../src/game.js');
+  const g = newGame(11);
+  g.inventory = [item('normal'), item('magic'), item('rare'), { ...item('rare'), uid: 9, locked: true }];
+  const res = salvageAll(g, 'all');
+  assert.equal(res.count, 3);
+  assert.equal(res.scrap, 1 + 2 + 5);
+  assert.equal(g.inventory.length, 1);
+  assert.ok(g.inventory[0].locked);
+});

@@ -320,6 +320,7 @@ export function renderGear(state, ui) {
     type: (a, b) => ITEM_TYPES.indexOf(BASES[a.it.baseId].slot) - ITEM_TYPES.indexOf(BASES[b.it.baseId].slot) || b.idx - a.idx,
   };
   list.sort(sorters[sort] || sorters.new);
+  const unlocked = state.inventory.filter((i) => !i.locked);
   const advisor = leagueAutomationUnlocked(state, 'upgradeAdvisor');
 
   const counts = {};
@@ -372,7 +373,8 @@ export function renderGear(state, ui) {
       <h3>Inventory <span class="muted small">${state.inventory.length} / ${RULES.inventorySize}${list.length !== state.inventory.length ? ` · showing ${list.length}` : ''}</span></h3>
       <div class="filters">${filters}</div>
       ${controls}
-      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><span class="muted small">Ctrl+click an item to salvage it. Locked items are skipped.</span></div>
+      <div class="bulk"><button class="small-btn" data-action="salvage-all" data-rarity="normal">Salvage all Normal</button><button class="small-btn" data-action="salvage-all" data-rarity="magic">Salvage all Magic</button><button class="small-btn" data-action="salvage-everything-ask" ${unlocked.length ? '' : 'disabled'}>Salvage all</button><span class="muted small">Ctrl+click an item to salvage it. Locked items are skipped.</span></div>
+      ${ui.confirmSalvageAll && unlocked.length ? `<div class="reset-confirm"><span>Salvage all ${unlocked.length} unlocked item${unlocked.length === 1 ? '' : 's'} for ${unlocked.reduce((a, i) => a + salvageValue(i), 0)} Scrap?</span><button class="danger" data-action="salvage-everything">Salvage them</button><button data-action="salvage-everything-cancel">Cancel</button></div>` : ''}
       <div class="inv">${rows}</div>
     </section>
     <section class="gear-right">${detail}</section>
