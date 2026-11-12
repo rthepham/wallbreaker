@@ -4,7 +4,8 @@ Built: milestones M0–M12 in prototype form.
 - Zones 1–10 (Swarm, Brute, fire/cold/lightning Casters, Blight), resistance penalty from zone 6.
 - 8 gear slots, 7 item types, wands, ~30 mod families; inventory filters, sort, search, change chips.
 - 4 skills, 20 supports, element effects (ignite, shock, chill, stun), monster resistances.
-- Passive tree: 139 nodes, 9 keystones, region bridges, zoom/pan.
+- Passive tree: 149 nodes, 10 keystones (incl. Hollow Vessel), start region, region bridges, zoom/pan.
+- Energy shield (gear, tree), Atlas bonuses for each map tier's first clear.
 - Maps: 16 tiers, 5 layouts, 6 map mods, map crafting, sustain, map runner.
 - Offline progress (50%, 8h cap), save export/import.
 - Automation: auto-salvage, loot filter, map runner, craft rules, upgrade advisor.
@@ -63,6 +64,16 @@ Cleave: steadiest; Brutes resist it, Ember Heart / Searing Edge get around that.
 Zone 10 reached in 60–120 min for all skills; first clear ~135 min (Cleave) to ~230 min (Fireball).
 Maps: tier 1–2 sustain well (56/66 cleared), but the bot climbs tiers slowly. Tier pacing needs human play.
 
+## Late-game sweep (`npm run lategame -- 3 cleave`)
+Generated characters with well-crafted gear (best tiers for the map's item level, 70% rolls),
+Cleave, greedy tree. 15 runs per tier across all layouts:
+- Tiers 1–11: 15/15 cleared, boss fights 14–31 s.
+- Tier 12: 14/15. Tiers 13–16: 6–9/15, dying to Brute packs. The top tiers are a real challenge even with near-ideal gear.
+- A real player's level 56 Cleave (866 DPS, weak weapon) stalled at tier 4 before the
+  map-level change; generated gear had ~4,400 DPS at that tier. The weapon is the biggest lever.
+League loop: a new league from a tier 9 character earned 12 Legacy points; with Head Start,
+Quick Study and Fortune plus an heirloom weapon, the new character reached level 26 and zone 5
+in 30 minutes vs level 8 and zone 2 for a fresh league-1 character (both unattended).
+
 ## Next
-Human playtest. Known gaps: tree is ~139 nodes (doc ~150), no start-region choice, no Atlas,
-Hollow Vessel / energy shield not built, map tier pacing unverified past tier 2.
+Human playtest of tiers 5+ and league 2.

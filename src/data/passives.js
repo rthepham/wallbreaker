@@ -47,6 +47,11 @@ export const KEYSTONES = {
     text: ['Your chills slow twice as much (up to 60%)', '20% less damage'],
     mods: [INC('chill', 100), MORE('damage', -20)],
   },
+  hollow_vessel: {
+    name: 'Hollow Vessel',
+    text: ['Chaos damage cannot harm you', 'Your maximum life is 1', 'You gain energy shield equal to twice your maximum life'],
+    mods: [L('hollowVessel', 1)],
+  },
   bulwark: {
     name: 'Bulwark of Will',
     text: ['+5% to all maximum resistances', '+20% to fire, cold and lightning resistance', '15% less maximum life'],
@@ -66,7 +71,10 @@ const REGIONS = [
     gate: [L('life', 20)],
     branches: [
       { small: [L('armour', 30), L('life', 15)], mid: N('Ironbound', INC('armour', 30), L('armour', 40)), end: 'iron_hide' },
-      { small: [INC('physical', 15), INC('stun', 25)], mid: N('Crushing Blows', INC('physical', 30), INC('stun', 50)), end: N('Juggernaut Strength', INC('physical', 40), INC('attackSpeed', 10)) },
+      {
+        small: [INC('physical', 15), INC('stun', 25)], mid: N('Crushing Blows', INC('physical', 30), INC('stun', 50)), end: N('Juggernaut Strength', INC('physical', 40), INC('attackSpeed', 10)),
+        ext: { small: [INC('physical', 15), L('life', 20)], end: N("Titan's Grip", INC('physical', 30), INC('stun', 40)), length: 3 },
+      },
       { small: [L('life', 15), L('lifeRegen', 2)], mid: N('Unbreaking', INC('life', 10), L('lifeRegen', 3)), end: 'colossus' },
       { small: [INC('fire', 15), L('igniteChance', 6)], mid: N('Kindled Fury', INC('ignite', 50), L('igniteChance', 10)), end: 'ember_heart' },
       { small: [INC('armour', 12), L('fireRes', 8)], mid: N('Steelskin', INC('armour', 25), L('life', 25)), end: N('Bastion', L('armour', 80), L('fireRes', 15), INC('life', 6)) },
@@ -77,7 +85,10 @@ const REGIONS = [
     gate: [L('evasion', 30)],
     branches: [
       { small: [INC('attackSpeed', 6), INC('castSpeed', 6)], mid: N('Relentless', INC('attackSpeed', 10), INC('castSpeed', 10)), end: 'reckless_tempo' },
-      { small: [INC('critChance', 25), L('critMulti', 10)], mid: N('Killer Instinct', INC('critChance', 50), L('critMulti', 20)), end: N('Deadly Precision', INC('critChance', 60), L('critMulti', 30)) },
+      {
+        small: [INC('critChance', 25), L('critMulti', 10)], mid: N('Killer Instinct', INC('critChance', 50), L('critMulti', 20)), end: N('Deadly Precision', INC('critChance', 60), L('critMulti', 30)),
+        ext: { small: [INC('critChance', 25), L('critMulti', 10)], end: N("Assassin's Mark", L('critMulti', 35), INC('damage', 15)), length: 3 },
+      },
       { small: [L('evasion', 30), INC('damage', 8)], mid: N('Sweeping Reach', L('targets', 1), INC('evasion', 20)), end: 'spread_thin' },
       { small: [INC('lightning', 15), L('shockChance', 6)], mid: N('Static Charge', INC('shock', 50), L('shockChance', 10)), end: 'thunderstruck' },
       { small: [INC('evasion', 12), INC('attack', 12)], mid: N("Duelist's Grace", INC('evasion', 25), INC('attack', 20)), end: N('Opportunist', INC('damage', 30), L('evasion', 60)) },
@@ -88,7 +99,11 @@ const REGIONS = [
     gate: [L('mana', 20)],
     branches: [
       { small: [INC('spell', 15), INC('manaRegen', 15)], mid: N('Arcane Focus', INC('spell', 30), L('mana', 30)), end: 'blood_price' },
-      { small: [L('mana', 15), INC('manaRegen', 20)], mid: N('Wellspring', INC('manaRegen', 40), L('mana', 20)), end: N('Deep Reserves', L('mana', 60), INC('manaRegen', 50)) },
+      {
+        small: [L('mana', 15), INC('manaRegen', 20)], mid: N('Wellspring', INC('manaRegen', 40), L('mana', 20)), end: N('Deep Reserves', L('mana', 60), INC('manaRegen', 50)),
+        // Past the mana notable: an energy shield path to Hollow Vessel.
+        ext: { small: [L('energyShield', 30), INC('energyShield', 15)], end: 'hollow_vessel', length: 4 },
+      },
       { small: [L('fireRes', 10), L('lightningRes', 10)], mid: N('Elemental Ward', L('fireRes', 12), L('coldRes', 12), L('lightningRes', 12)), end: 'bulwark' },
       { small: [INC('cold', 15), INC('chill', 15)], mid: N('Hoarfrost', INC('chill', 40), INC('cold', 25)), end: 'deep_winter' },
       { small: [INC('elemental', 12), INC('castSpeed', 5)], mid: N('Elemental Mastery', INC('elemental', 30)), end: N('Piercing Will', L('penetration', 10), INC('elemental', 15)) },
@@ -135,6 +150,22 @@ function build() {
         link(prev, id);
         prev = id;
       }
+      // Some branches continue past their last notable.
+      if (B.ext) {
+        for (let j = 0; j < B.ext.length; j++) {
+          const i = 8 + j;
+          const at = pos(angle, R0 + i * STEP);
+          const last = j === B.ext.length - 1;
+          let id;
+          if (last && typeof B.ext.end === 'string') {
+            const K = KEYSTONES[B.ext.end];
+            id = add({ id: B.ext.end, region: R.id, type: 'keystone', name: K.name, mods: K.mods, text: K.text, ...at });
+          } else if (last) id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: 'notable', ...B.ext.end, ...at });
+          else id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: 'small', name: 'Passive', mods: [B.ext.small[j % 2]], ...at });
+          link(prev, id);
+          prev = id;
+        }
+      }
     });
   }
   // Bridges run from the last branch of one region to the first branch of the next,
@@ -173,4 +204,24 @@ export const PASSIVE_RULES = {
   // Refund cost in Scrap: base + level / perLevels.
   refundBase: 1,
   refundPerLevels: 4,
+};
+
+// Atlas: the first clear of each map tier gives a small bonus for the rest of the league.
+export const ATLAS_BONUSES = {
+  1: { text: '+3% item quantity', mods: [L('itemQuantity', 3)] },
+  2: { text: '+5% to fire, cold and lightning resistance', mods: [L('fireRes', 5), L('coldRes', 5), L('lightningRes', 5)] },
+  3: { text: '4% increased maximum life', mods: [INC('life', 4)] },
+  4: { text: '8% increased damage', mods: [INC('damage', 8)] },
+  5: { text: '+5% item quantity', mods: [L('itemQuantity', 5)] },
+  6: { text: '+6% to chaos resistance', mods: [L('chaosRes', 6)] },
+  7: { text: '5% increased attack and cast speed', mods: [INC('attackSpeed', 5), INC('castSpeed', 5)] },
+  8: { text: '+1% to all maximum resistances', mods: [L('maxFireRes', 1), L('maxColdRes', 1), L('maxLightningRes', 1), L('maxChaosRes', 1)] },
+  9: { text: '6% increased maximum life', mods: [INC('life', 6)] },
+  10: { text: '12% increased damage', mods: [INC('damage', 12)] },
+  11: { text: '+7% item quantity', mods: [L('itemQuantity', 7)] },
+  12: { text: '10% increased armour, evasion and energy shield', mods: [INC('armour', 10), INC('evasion', 10), INC('energyShield', 10)] },
+  13: { text: '+8% to chaos resistance', mods: [L('chaosRes', 8)] },
+  14: { text: '+1% to all maximum resistances', mods: [L('maxFireRes', 1), L('maxColdRes', 1), L('maxLightningRes', 1), L('maxChaosRes', 1)] },
+  15: { text: '+10% item quantity', mods: [L('itemQuantity', 10)] },
+  16: { text: '15% increased damage, 5% increased maximum life', mods: [INC('damage', 15), INC('life', 5)] },
 };

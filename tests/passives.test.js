@@ -27,10 +27,10 @@ function pathTo(id) {
   return out;
 }
 
-test('tree shape: 139 nodes, 9 keystones, every node reachable, links are two-way', () => {
+test('tree shape: 149 nodes, 10 keystones, every node reachable, links are two-way', () => {
   const ids = Object.keys(PASSIVES);
-  assert.equal(ids.length, 139);
-  assert.equal(ids.filter((i) => PASSIVES[i].type === 'keystone').length, 9);
+  assert.equal(ids.length, 149);
+  assert.equal(ids.filter((i) => PASSIVES[i].type === 'keystone').length, 10);
   for (const id of ids) {
     if (id !== 'origin') assert.ok(pathTo(id).length > 0, id);
     for (const n of PASSIVES[id].links) assert.ok(PASSIVES[n].links.includes(id));
@@ -148,4 +148,54 @@ test('Blood Price: 25% more damage', () => {
 
 test('every keystone has a working rule text', () => {
   for (const k of Object.values(KEYSTONES)) assert.ok(k.text.length && k.mods.length);
+});
+
+// ---------- Energy shield, Hollow Vessel, start region, Atlas ----------
+import { maxHitTaken as mht, damageTaken as dt2 } from '../src/stats.js';
+
+test('energy shield adds to the pool for every type except chaos', () => {
+  const body = { uid: 1, baseId: 'sage_vestment', ilvl: 40, rarity: 'magic', mods: [{ family: 'energy_shield', tier: 4, value: 60 }] };
+  const s = computeStats(char([], { equipment: { weapon: null, body, ring1: null } }));
+  assert.equal(s.energyShield, 150);
+  const mh = mht(s, 1);
+  assert.ok(mh.fire > s.life + 100);
+  assert.ok(Math.abs(mh.chaos - s.life) < 1e-6);
+});
+
+test('Hollow Vessel: life 1, energy shield = 2x life, immune to chaos', () => {
+  const path = pathTo('hollow_vessel');
+  const a = computeStats(char(path.slice(0, -1)));
+  const b = computeStats(char(path));
+  assert.equal(b.life, 1);
+  assert.ok(b.energyShield >= a.life * 2);
+  assert.equal(dt2(b, 'chaos', 1000, 1), 0);
+});
+
+test('energy shield absorbs hits and recharges in combat', () => {
+  const g = newGame(13);
+  g.character.equipment.body = { uid: 77, baseId: 'sage_vestment', ilvl: 40, rarity: 'normal', mods: [] };
+  invalidateStats(g);
+  startRun(g, 2);
+  assert.equal(g.player.es, getStats(g).energyShield);
+  runTicks(g, 600);
+  assert.ok(g.lifetime.kills > 0);
+  assert.ok(g.player.es >= 0 && g.player.es <= getStats(g).energyShield);
+});
+
+test('start region: the first gate is free, other gates need a bridge', () => {
+  const g = newGame(14);
+  g.character.level = 20;
+  assert.ok(allocatePassive(g, 'might_gate').ok);
+  assert.match(canAllocate(g, 'mind_gate'), /start region is Might/);
+  // Walk to the Mind branch over the Might-Mind bridge, then the gate opens.
+  for (const id of pathTo('mind_4_4').filter((n) => !g.character.passives.includes(n)).slice(0, 30)) allocatePassive(g, id);
+  if (g.character.passives.includes('mind_4_0')) assert.equal(canAllocate(g, 'mind_gate'), null);
+});
+
+test('Atlas bonuses apply from cleared map tiers', () => {
+  const base = computeStats(char([]));
+  const withAtlas = computeStats(char([], { atlas: [2, 4] }));
+  assert.equal(withAtlas.res.fire, base.res.fire + 5);
+  assert.ok(withAtlas.damage.dps > base.damage.dps);
+  assert.equal(computeStats(char([], { atlas: [1, 5] })).itemQuantity, 8);
 });

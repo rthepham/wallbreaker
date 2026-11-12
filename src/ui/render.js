@@ -15,7 +15,7 @@ import { eligibleFamilies } from '../loot.js';
 import { AUTOMATION } from '../data/automation.js';
 import { MAP_RULES, MAP_LAYOUTS, MAP_MODS } from '../data/maps.js';
 import { mapLevel, mapIiq, canCraftMap } from '../maps.js';
-import { PASSIVES, PASSIVE_REGIONS } from '../data/passives.js';
+import { PASSIVES, PASSIVE_REGIONS, ATLAS_BONUSES } from '../data/passives.js';
 import { SKILLS, SKILL_ORDER, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from '../data/skills.js';
 import { maxHitTaken, effectiveRes, DAMAGE_TYPES } from '../stats.js';
 import { monsterBaseLife } from '../combat.js';
@@ -107,6 +107,7 @@ export function renderVitals(state) {
     <div class="level-row"><span class="level">Level ${ch.level}</span><span class="muted small">${fmt(ch.xp)} / ${fmt(need)} XP</span></div>
     ${bar('xp', ch.xp, need, '')}
     ${bar('life', Math.max(0, p.life), s.life, `Life ${fmt(Math.max(0, p.life))} / ${fmt(s.life)}`)}
+    ${s.energyShield > 0 ? bar('es', p.es || 0, s.energyShield, `Energy shield ${fmt(p.es || 0)} / ${fmt(s.energyShield)}`) : ''}
     ${bar('mana', p.mana, s.mana, `Mana ${fmt(p.mana)} / ${fmt(s.mana)}`)}
     ${p.blight && p.blight.length ? `<div class="blight small">Blight ×${p.blight.length}: losing ${fmt(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, 'chaos', area) / 100))} life per second</div>` : ''}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? 's' : ''}` : ''}</span></h3>
@@ -122,10 +123,11 @@ export function renderVitals(state) {
     <h3>Defence</h3>
     <div class="kv"><span>Armour</span><b>${fmt(s.armour)}</b></div>
     <div class="kv"><span>Evasion</span><b>${fmt(s.evasion)}</b></div>
+    ${s.energyShield > 0 ? `<div class="kv"><span>Energy shield</span><b>${fmt(s.energyShield)}</b></div>` : ''}
     <div class="kv"><span>Life regen</span><b>${fmt1(s.lifeRegen)}/s</b></div>
     ${['fire', 'cold', 'lightning', 'chaos'].map(resRow).join('')}
     <h3>Max hit you can survive</h3>
-    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap(t)}<b>${fmt(mh[t])}</b></div>`).join('')}</div>
+    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap(t)}<b>${Number.isFinite(mh[t]) ? fmt(mh[t]) : 'immune'}</b></div>`).join('')}</div>
     <div class="kv boss-ttk"><span>Time to kill ${esc(zone.boss.name)}</span><b>${fmt(ttk)}s</b></div>
   `;
 }
@@ -428,6 +430,7 @@ export function renderSheet(state) {
       ${row('Maximum mana', fmt(s.mana), 'mana')}
       ${row('Armour', fmt(s.armour), 'armour')}
       ${row('Evasion', fmt(s.evasion), 'evasion')}
+      ${row('Energy shield', fmt(s.energyShield), 'energyShield')}
       ${row('Fire resistance', `${s.res.fire}%`, 'fireRes', '%')}
       ${row('Cold resistance', `${s.res.cold}%`, 'coldRes', '%')}
       ${row('Lightning resistance', `${s.res.lightning}%`, 'lightningRes', '%')}
@@ -595,6 +598,7 @@ export function renderTree(state, ui) {
       <li>You get 1 point per level, plus 2 each for first clearing zones 5 and 10.</li>
       <li>Bridges between regions let you mix, e.g. attacks with life, or crits with spells.</li>
       <li>A node can be taken once it touches one you already have. <b>Ctrl+click</b> a node to allocate it straight away.</li>
+      <li>Your first region gate picks your <b>start region</b>. Other regions are reached through the bridges between regions.</li>
       <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
       <li>Refunding a node costs ${refundCost(state)} Scrap at your level.</li>
     </ul>`;
@@ -631,7 +635,7 @@ export function renderTree(state, ui) {
 // ---------- Automation ----------
 
 const FAMILY_GROUPS = [
-  ['Defence', ['life', 'armour', 'ring_armour', 'evasion', 'piece_evasion', 'life_regen']],
+  ['Defence', ['life', 'armour', 'ring_armour', 'evasion', 'piece_evasion', 'energy_shield', 'piece_es', 'es_inc', 'life_regen']],
   ['Resistances', ['fire_res', 'cold_res', 'lightning_res', 'chaos_res']],
   ['Attacks', ['phys_inc', 'added_phys', 'ring_added_phys', 'attack_speed']],
   ['Spells and elements', ['spell_inc', 'cast_speed', 'ring_ele_inc', 'ignite_chance', 'shock_chance', 'chill_effect']],
@@ -700,8 +704,9 @@ export function renderMaps(state, ui) {
   const tiers = Array.from({ length: MAP_RULES.maxTier }, (_, i) => i + 1).map((t) => {
     const done = mp.cleared.includes(t);
     const bonus = MAP_RULES.bonusPointTiers.includes(t);
-    return `<span class="tier-cell ${done ? 'done' : ''}" title="Tier ${t}${done ? ': cleared' : ''}${bonus ? ' · 2 passive points on first clear' : ''}">${t}${bonus ? '<i>+2</i>' : ''}</span>`;
+    return `<span class="tier-cell ${done ? 'done' : ''}" title="Tier ${t}${done ? ': cleared' : ''} · Atlas: ${ATLAS_BONUSES[t].text}${bonus ? ' · 2 passive points on first clear' : ''}">${t}${bonus ? '<i>+2</i>' : ''}</span>`;
   }).join('');
+  const atlas = Array.from({ length: MAP_RULES.maxTier }, (_, i) => i + 1).map((t) => `<li class="${mp.cleared.includes(t) ? 'done' : ''}"><span class="tick" aria-hidden="true">${mp.cleared.includes(t) ? '✓' : ''}</span>T${t}: ${esc(ATLAS_BONUSES[t].text)}</li>`).join('');
   let detail = '<p class="muted">Select a map to see its monsters, mods and rewards, then run it. Running a map uses it up, whether you clear it or die.</p>';
   if (sel) {
     const L = MAP_LAYOUTS[sel.layout];
@@ -731,6 +736,7 @@ export function renderMaps(state, ui) {
   return `<div class="gear-grid">
     <section class="gear-left">
       <h3>Tiers cleared</h3><div class="tier-grid">${tiers}</div>
+      <details class="atlas"><summary><span>Atlas bonuses</span><b>${mp.cleared.length} / ${MAP_RULES.maxTier}</b></summary><p class="muted small">The first clear of each tier gives a bonus for the rest of the league.</p><ul class="challenges">${atlas}</ul></details>
       ${inMap}${runner}
       <h3>Map stash <span class="muted small">${state.maps.length} / ${MAP_RULES.stashSize}</span></h3>
       <div class="inv">${list.map((m) => mapRow(m, sel === m)).join('') || '<p class="muted small empty">No maps. Clear zone 10 or a map to find more.</p>'}</div>

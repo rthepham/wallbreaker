@@ -63,6 +63,21 @@ export function invalidateStats(state) {
   // Keep current life/mana within the new maximum.
   state.player.life = Math.min(state.player.life, s.life);
   state.player.mana = Math.min(state.player.mana, s.mana);
+  state.player.es = Math.min(state.player.es ?? s.energyShield, s.energyShield);
+}
+
+// Energy shield takes damage before life, except chaos damage.
+const ES_RECHARGE_DELAY = 2; // seconds without taking damage
+const ES_RECHARGE_RATE = 0.2; // share of max per second
+function applyDamage(state, amount, type) {
+  const p = state.player;
+  p.lastDamageAt = state.time;
+  if (type !== 'chaos' && p.es > 0) {
+    const absorbed = Math.min(p.es, amount);
+    p.es -= absorbed;
+    amount -= absorbed;
+  }
+  p.life -= amount;
 }
 
 function newUid(state) {
@@ -83,7 +98,7 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
     seed,
     rngState: seed,
     time: 0,
-    character: { level: 1, xp: 0, skill: { id: 'cleave', supports: [] }, passives: ['origin'], equipment: Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null])) },
+    character: { level: 1, xp: 0, skill: { id: 'cleave', supports: [] }, passives: ['origin'], atlas: [], equipment: Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null])) },
     ownedSupports: [...LINKS.startingSupports],
     player: { life: 1, mana: 1, attackTimer: 0 },
     inventory: [],
@@ -112,6 +127,7 @@ export function newGame(seed = (Date.now() ^ 0x5eed) >>> 0) {
   const s = getStats(state);
   state.player.life = s.life;
   state.player.mana = s.mana;
+  state.player.es = s.energyShield;
   startRun(state, 1);
   log(state, 'info', 'Your character sets out for The Sunken Yard.');
   return state;
@@ -144,6 +160,7 @@ export function startRun(state, zoneId) {
   if (typeof zoneId === 'number') state.zoneId = zoneId;
   state.player.life = s.life;
   state.player.mana = s.mana;
+  state.player.es = s.energyShield;
   state.player.attackTimer = 0;
   state.player.blight = [];
   state.run = {
@@ -171,6 +188,10 @@ function regen(state, dt, outOfCombat = false) {
   const p = state.player;
   const extra = outOfCombat ? s.life * PLAYER.outOfCombatRegenPctPerSec : 0;
   p.life = Math.min(s.life, p.life + (s.lifeRegen + extra) * dt);
+  if (s.energyShield > 0) {
+    const idle = outOfCombat || state.time - (p.lastDamageAt ?? -99) >= ES_RECHARGE_DELAY;
+    if (idle) p.es = Math.min(s.energyShield, (p.es ?? 0) + s.energyShield * ES_RECHARGE_RATE * (outOfCombat ? 2 : 1) * dt);
+  } else p.es = 0;
   p.mana = Math.min(s.mana, p.mana + s.manaRegen * dt);
 }
 
@@ -347,7 +368,7 @@ function tickBlight(state, s) {
   if (!p.blight || !p.blight.length) return false;
   const raw = p.blight.reduce((a, b) => a + b.dps, 0) * DT;
   const taken = damageTaken(s, 'chaos', raw, state.run.zoneId);
-  p.life -= taken;
+  applyDamage(state, taken, 'chaos');
   const rec = state.run.record;
   rec.damageByType.chaos = (rec.damageByType.chaos || 0) + taken;
   const recent = (state.run.recentHits ||= []);
@@ -462,7 +483,7 @@ function monsterHit(state, s, m, mult, isBig = false) {
   const extra = getZone(state.run.zoneId).extraFire;
   if (extra) taken += damageTaken(s, 'fire', raw * extra, state.run.zoneId);
   taken = Math.max(0, taken);
-  p.life -= taken;
+  applyDamage(state, taken, type);
   state.run.lastHit = { raw, taken, type, isBig };
   // Damage taken in the last few seconds, used to explain deaths.
   const recent = (state.run.recentHits ||= []);
@@ -471,7 +492,7 @@ function monsterHit(state, s, m, mult, isBig = false) {
   rec.damageByType[type] = (rec.damageByType[type] || 0) + taken;
 
   const key = `${m.isBoss ? 'boss' : m.threat}:${type}${isBig ? ':big' : ''}`;
-  const pct = taken / s.life;
+  const pct = taken / (s.life + (type === 'chaos' ? 0 : s.energyShield));
   const prev = rec.worstHits[key];
   if (!prev || pct > prev.pct) {
     rec.worstHits[key] = {
@@ -498,7 +519,7 @@ function monsterKilled(state, m) {
   gainXp(state, xp);
   rec.xp += xp;
   // Drops wait in the pack's loot pile until the pack is cleared.
-  const fortune = 1 + 0.05 * legacyRank(state, 'fortune');
+  const fortune = 1 + 0.05 * legacyRank(state, 'fortune') + getStats(state).itemQuantity / 100;
   const drops = rollMonsterDrops(rng(state), { ...m, dropMult: m.dropMult * fortune }, newUid(state));
   const pl = state.run.pendingLoot;
   const mech = state.league.mechanic;
@@ -536,6 +557,7 @@ export function gainXp(state, amount) {
     const s = getStats(state);
     state.player.life = s.life;
     state.player.mana = s.mana;
+    state.player.es = s.energyShield;
     log(state, 'level', `Level up! Now level ${ch.level}. Life ${s.life}.`);
   }
   if (ch.level >= PLAYER.levelCap) ch.xp = 0;
@@ -667,6 +689,8 @@ function mapComplete(state) {
   if (!mp.cleared.includes(map.tier)) {
     mp.cleared.push(map.tier);
     mp.highest = Math.max(mp.highest, map.tier);
+    state.character.atlas = [...mp.cleared];
+    invalidateStats(state);
     log(state, 'clear', `First clear of a tier ${map.tier} map!`);
     if (MAP_RULES.bonusPointTiers.includes(map.tier)) log(state, 'level', 'You gain 2 passive points.');
     if (map.tier === AUTOMATION.mapRunner.mapTier) log(state, 'clear', 'Map runner unlocked (Automation tab).');
@@ -975,6 +999,12 @@ export function canAllocate(state, id) {
   if (!node) return 'Unknown node.';
   if (have.includes(id)) return 'Already allocated.';
   if (!node.links.some((n) => have.includes(n))) return 'Allocate a connected node first.';
+  // Start region: the first region gate is free. Other regions are reached through bridges.
+  if (id.endsWith('_gate')) {
+    const otherGate = have.find((n) => n.endsWith('_gate'));
+    const viaBranch = node.links.some((n) => n !== 'origin' && have.includes(n));
+    if (otherGate && !viaBranch) return `Your start region is ${PASSIVES[otherGate].name.replace(' Gate', '')}. Reach other regions through the bridges.`;
+  }
   if (passivesSpent(state) >= passivePoints(state)) return 'No passive points left. You get one per level.';
   return null;
 }
@@ -1278,6 +1308,7 @@ export function migrate(data) {
   data.mapProgress ||= { cleared: [], highest: 0 };
   data.mapRunner ||= { on: false, order: 'highest' };
   data.legacy ||= newLegacy();
+  if (data.character && !data.character.atlas) data.character.atlas = data.mapProgress ? [...data.mapProgress.cleared] : [];
   data.league ||= { number: 1, mechanic: null, challenges: [], shards: 0, start: 0, zone10Deaths: 0 };
   if (data.version === 1) {
     // v2: skills and supports.

@@ -106,6 +106,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .bar-label { position: relative; font-family: var(--f-mono); font-size: 0.78rem; padding: 0 6px; line-height: 18px; white-space: nowrap; }
 .bar.life .bar-fill { background: var(--life); }
 .bar.mana .bar-fill { background: var(--mana); }
+.bar.es .bar-fill { background: #2f7f8f; }
 .bar.xp { height: 6px; }
 .bar.xp .bar-fill { background: var(--xp); }
 .bar.mlife { height: 14px; margin: 0; }
@@ -408,6 +409,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
           <li><b>Damage types matter.</b> Fire sets enemies burning (great on bosses). Lightning shocks them so they take more damage. Cold chills them so they attack slower. Heavy physical hits stun. Some enemies resist a type: Brutes shrug off physical, casters resist their own element. The zone header shows who resists what.</li>
+          <li><b>Energy shield</b> takes hits before your life (except chaos) and refills after 2 seconds without taking damage.</li>
           <li><b>Zones 6–10:</b> your elemental resistances are 20% lower, so re-cap them. <b>Blight</b> monsters stack chaos damage over time on you (up to 5 stacks): chaos resistance and life regeneration are the answer. From zone 8, monsters resist all elements a little.</li>
           <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
           <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>
@@ -989,12 +991,16 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     warden_brigandine: { slot: "body", name: "Warden Brigandine", ilvl: 28, implicits: [I("armour", 110), I("evasion", 110)] },
     knight_plate: { slot: "body", name: "Knight Plate", ilvl: 34, implicits: [I("armour", 220)] },
     shadow_garb: { slot: "body", name: "Shadow Garb", ilvl: 34, implicits: [I("evasion", 220)] },
+    silk_robe: { slot: "body", name: "Silk Robe", ilvl: 5, implicits: [I("energyShield", 25)] },
+    sage_vestment: { slot: "body", name: "Sage Vestment", ilvl: 30, implicits: [I("energyShield", 90)] },
     // Helmets
     leather_cap: { slot: "helmet", name: "Leather Cap", ilvl: 1, implicits: [I("evasion", 10)] },
     iron_helm: { slot: "helmet", name: "Iron Helm", ilvl: 1, implicits: [I("armour", 10)] },
     sage_circlet: { slot: "helmet", name: "Sage Circlet", ilvl: 12, implicits: [I("mana", 20)] },
     hunter_hood: { slot: "helmet", name: "Hunter Hood", ilvl: 20, implicits: [I("evasion", 50)] },
     visored_helm: { slot: "helmet", name: "Visored Helm", ilvl: 20, implicits: [I("armour", 50)] },
+    silk_hood: { slot: "helmet", name: "Silk Hood", ilvl: 8, implicits: [I("energyShield", 12)] },
+    arcane_circlet: { slot: "helmet", name: "Arcane Circlet", ilvl: 34, implicits: [I("energyShield", 40)] },
     crowned_helm: { slot: "helmet", name: "Crowned Helm", ilvl: 36, implicits: [I("armour", 60), I("evasion", 60)] },
     // Gloves
     wrapped_mitts: { slot: "gloves", name: "Wrapped Mitts", ilvl: 1, implicits: [I("evasion", 8)] },
@@ -1002,12 +1008,14 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     spellweave_gloves: { slot: "gloves", name: "Spellweave Gloves", ilvl: 14, implicits: [I("castSpeed", 5, "increased")] },
     studded_gloves: { slot: "gloves", name: "Studded Gloves", ilvl: 20, implicits: [I("evasion", 40)] },
     plated_gauntlets: { slot: "gloves", name: "Plated Gauntlets", ilvl: 20, implicits: [I("armour", 40)] },
+    mystic_wraps: { slot: "gloves", name: "Mystic Wraps", ilvl: 10, implicits: [I("energyShield", 10)] },
     duelist_gloves: { slot: "gloves", name: "Duelist Gloves", ilvl: 32, implicits: [I("attackSpeed", 6, "increased")] },
     // Boots
     leather_boots: { slot: "boots", name: "Leather Boots", ilvl: 1, implicits: [I("evasion", 8)] },
     iron_greaves: { slot: "boots", name: "Iron Greaves", ilvl: 1, implicits: [I("armour", 8)] },
     shadow_boots: { slot: "boots", name: "Shadow Boots", ilvl: 20, implicits: [I("evasion", 40)] },
     plated_greaves: { slot: "boots", name: "Plated Greaves", ilvl: 20, implicits: [I("armour", 40)] },
+    silk_slippers: { slot: "boots", name: "Silk Slippers", ilvl: 10, implicits: [I("energyShield", 10)] },
     pilgrim_boots: { slot: "boots", name: "Pilgrim Boots", ilvl: 30, implicits: [I("lifeRegen", 4)] },
     // Amulets
     amber_amulet: { slot: "amulet", name: "Amber Amulet", ilvl: 1, implicits: [I("life", 12)] },
@@ -1079,6 +1087,36 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       text: "+{v} to Evasion",
       weight: 70,
       tiers: tiers([[5, 10], [12, 22], [25, 38], [40, 60], [65, 90], [95, 120], [125, 150], [150, 200]])
+    },
+    energy_shield: {
+      name: "Energy Shield",
+      type: "prefix",
+      slots: ["body"],
+      stat: "energyShield",
+      kind: "flat",
+      text: "+{v} to Energy Shield",
+      weight: 80,
+      tiers: tiers([[8, 15], [16, 28], [29, 45], [46, 65], [66, 90], [91, 115], [116, 140], [141, 170]])
+    },
+    piece_es: {
+      name: "Energy Shield",
+      type: "prefix",
+      slots: ["helmet", "gloves", "boots", "amulet"],
+      stat: "energyShield",
+      kind: "flat",
+      text: "+{v} to Energy Shield",
+      weight: 60,
+      tiers: tiers([[4, 8], [9, 15], [16, 24], [25, 35], [36, 48], [49, 62], [63, 76], [77, 92]])
+    },
+    es_inc: {
+      name: "Increased Energy Shield",
+      type: "prefix",
+      slots: ["body", "helmet"],
+      stat: "energyShield",
+      kind: "increased",
+      text: "{v}% increased Energy Shield",
+      weight: 60,
+      tiers: tiers([[10, 15], [16, 22], [23, 30], [31, 39], [40, 49], [50, 59], [60, 69], [70, 80]])
     },
     mana: {
       name: "Maximum Mana",
@@ -1613,6 +1651,11 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       text: ["Your chills slow twice as much (up to 60%)", "20% less damage"],
       mods: [INC("chill", 100), MORE("damage", -20)]
     },
+    hollow_vessel: {
+      name: "Hollow Vessel",
+      text: ["Chaos damage cannot harm you", "Your maximum life is 1", "You gain energy shield equal to twice your maximum life"],
+      mods: [L("hollowVessel", 1)]
+    },
     bulwark: {
       name: "Bulwark of Will",
       text: ["+5% to all maximum resistances", "+20% to fire, cold and lightning resistance", "15% less maximum life"],
@@ -1637,7 +1680,12 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       gate: [L("life", 20)],
       branches: [
         { small: [L("armour", 30), L("life", 15)], mid: N("Ironbound", INC("armour", 30), L("armour", 40)), end: "iron_hide" },
-        { small: [INC("physical", 15), INC("stun", 25)], mid: N("Crushing Blows", INC("physical", 30), INC("stun", 50)), end: N("Juggernaut Strength", INC("physical", 40), INC("attackSpeed", 10)) },
+        {
+          small: [INC("physical", 15), INC("stun", 25)],
+          mid: N("Crushing Blows", INC("physical", 30), INC("stun", 50)),
+          end: N("Juggernaut Strength", INC("physical", 40), INC("attackSpeed", 10)),
+          ext: { small: [INC("physical", 15), L("life", 20)], end: N("Titan's Grip", INC("physical", 30), INC("stun", 40)), length: 3 }
+        },
         { small: [L("life", 15), L("lifeRegen", 2)], mid: N("Unbreaking", INC("life", 10), L("lifeRegen", 3)), end: "colossus" },
         { small: [INC("fire", 15), L("igniteChance", 6)], mid: N("Kindled Fury", INC("ignite", 50), L("igniteChance", 10)), end: "ember_heart" },
         { small: [INC("armour", 12), L("fireRes", 8)], mid: N("Steelskin", INC("armour", 25), L("life", 25)), end: N("Bastion", L("armour", 80), L("fireRes", 15), INC("life", 6)) }
@@ -1650,7 +1698,12 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       gate: [L("evasion", 30)],
       branches: [
         { small: [INC("attackSpeed", 6), INC("castSpeed", 6)], mid: N("Relentless", INC("attackSpeed", 10), INC("castSpeed", 10)), end: "reckless_tempo" },
-        { small: [INC("critChance", 25), L("critMulti", 10)], mid: N("Killer Instinct", INC("critChance", 50), L("critMulti", 20)), end: N("Deadly Precision", INC("critChance", 60), L("critMulti", 30)) },
+        {
+          small: [INC("critChance", 25), L("critMulti", 10)],
+          mid: N("Killer Instinct", INC("critChance", 50), L("critMulti", 20)),
+          end: N("Deadly Precision", INC("critChance", 60), L("critMulti", 30)),
+          ext: { small: [INC("critChance", 25), L("critMulti", 10)], end: N("Assassin's Mark", L("critMulti", 35), INC("damage", 15)), length: 3 }
+        },
         { small: [L("evasion", 30), INC("damage", 8)], mid: N("Sweeping Reach", L("targets", 1), INC("evasion", 20)), end: "spread_thin" },
         { small: [INC("lightning", 15), L("shockChance", 6)], mid: N("Static Charge", INC("shock", 50), L("shockChance", 10)), end: "thunderstruck" },
         { small: [INC("evasion", 12), INC("attack", 12)], mid: N("Duelist's Grace", INC("evasion", 25), INC("attack", 20)), end: N("Opportunist", INC("damage", 30), L("evasion", 60)) }
@@ -1663,7 +1716,13 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       gate: [L("mana", 20)],
       branches: [
         { small: [INC("spell", 15), INC("manaRegen", 15)], mid: N("Arcane Focus", INC("spell", 30), L("mana", 30)), end: "blood_price" },
-        { small: [L("mana", 15), INC("manaRegen", 20)], mid: N("Wellspring", INC("manaRegen", 40), L("mana", 20)), end: N("Deep Reserves", L("mana", 60), INC("manaRegen", 50)) },
+        {
+          small: [L("mana", 15), INC("manaRegen", 20)],
+          mid: N("Wellspring", INC("manaRegen", 40), L("mana", 20)),
+          end: N("Deep Reserves", L("mana", 60), INC("manaRegen", 50)),
+          // Past the mana notable: an energy shield path to Hollow Vessel.
+          ext: { small: [L("energyShield", 30), INC("energyShield", 15)], end: "hollow_vessel", length: 4 }
+        },
         { small: [L("fireRes", 10), L("lightningRes", 10)], mid: N("Elemental Ward", L("fireRes", 12), L("coldRes", 12), L("lightningRes", 12)), end: "bulwark" },
         { small: [INC("cold", 15), INC("chill", 15)], mid: N("Hoarfrost", INC("chill", 40), INC("cold", 25)), end: "deep_winter" },
         { small: [INC("elemental", 12), INC("castSpeed", 5)], mid: N("Elemental Mastery", INC("elemental", 30)), end: N("Piercing Will", L("penetration", 10), INC("elemental", 15)) }
@@ -1712,6 +1771,21 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
           link(prev, id);
           prev = id;
         }
+        if (B.ext) {
+          for (let j = 0; j < B.ext.length; j++) {
+            const i = 8 + j;
+            const at = pos(angle, R0 + i * STEP);
+            const last2 = j === B.ext.length - 1;
+            let id;
+            if (last2 && typeof B.ext.end === "string") {
+              const K = KEYSTONES[B.ext.end];
+              id = add({ id: B.ext.end, region: R.id, type: "keystone", name: K.name, mods: K.mods, text: K.text, ...at });
+            } else if (last2) id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: "notable", ...B.ext.end, ...at });
+            else id = add({ id: `${R.id}_${bi}_${i}`, region: R.id, type: "small", name: "Passive", mods: [B.ext.small[j % 2]], ...at });
+            link(prev, id);
+            prev = id;
+          }
+        }
       });
     }
     for (const Bd of BRIDGES) {
@@ -1748,6 +1822,24 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     // Refund cost in Scrap: base + level / perLevels.
     refundBase: 1,
     refundPerLevels: 4
+  };
+  var ATLAS_BONUSES = {
+    1: { text: "+3% item quantity", mods: [L("itemQuantity", 3)] },
+    2: { text: "+5% to fire, cold and lightning resistance", mods: [L("fireRes", 5), L("coldRes", 5), L("lightningRes", 5)] },
+    3: { text: "4% increased maximum life", mods: [INC("life", 4)] },
+    4: { text: "8% increased damage", mods: [INC("damage", 8)] },
+    5: { text: "+5% item quantity", mods: [L("itemQuantity", 5)] },
+    6: { text: "+6% to chaos resistance", mods: [L("chaosRes", 6)] },
+    7: { text: "5% increased attack and cast speed", mods: [INC("attackSpeed", 5), INC("castSpeed", 5)] },
+    8: { text: "+1% to all maximum resistances", mods: [L("maxFireRes", 1), L("maxColdRes", 1), L("maxLightningRes", 1), L("maxChaosRes", 1)] },
+    9: { text: "6% increased maximum life", mods: [INC("life", 6)] },
+    10: { text: "12% increased damage", mods: [INC("damage", 12)] },
+    11: { text: "+7% item quantity", mods: [L("itemQuantity", 7)] },
+    12: { text: "10% increased armour, evasion and energy shield", mods: [INC("armour", 10), INC("evasion", 10), INC("energyShield", 10)] },
+    13: { text: "+8% to chaos resistance", mods: [L("chaosRes", 8)] },
+    14: { text: "+1% to all maximum resistances", mods: [L("maxFireRes", 1), L("maxColdRes", 1), L("maxLightningRes", 1), L("maxChaosRes", 1)] },
+    15: { text: "+10% item quantity", mods: [L("itemQuantity", 10)] },
+    16: { text: "15% increased damage, 5% increased maximum life", mods: [INC("damage", 15), INC("life", 5)] }
   };
 
   // src/data/ailments.js
@@ -2017,6 +2109,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const L2 = character.level;
     mods.push({ stat: "life", kind: "flat", value: PLAYER.life.base + PLAYER.life.perLevel * L2, source: `Level ${L2}` });
     mods.push({ stat: "mana", kind: "flat", value: PLAYER.mana.base + PLAYER.mana.perLevel * L2, source: `Level ${L2}` });
+    for (const t of character.atlas || []) {
+      const b = ATLAS_BONUSES[t];
+      if (b) for (const m of b.mods) mods.push({ ...m, source: `Atlas: tier ${t}` });
+    }
     for (const id of character.passives || []) {
       const node = PASSIVES[id];
       if (!node) continue;
@@ -2070,6 +2166,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return Math.min(raw - penalty, stats.maxRes[type] - maxMinus);
   }
   function damageTaken(stats, type, hit, zoneId) {
+    if (type === "chaos" && stats.chaosImmune) return 0;
     const less = 1 - (stats.lessDamageTaken || 0) / 100;
     if (type === "physical") return hit * (1 - armourReduction(stats.armour, hit)) * less;
     let taken = hit * (1 - effectiveRes(stats, type, zoneId) / 100);
@@ -2079,12 +2176,17 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   function maxHitTaken(stats, zoneId) {
     const out = {};
     for (const t of DAMAGE_TYPES) {
+      const pool = stats.life + (t === "chaos" ? 0 : stats.energyShield || 0);
+      if (t === "chaos" && stats.chaosImmune) {
+        out[t] = Infinity;
+        continue;
+      }
       let lo = 0;
-      let hi = stats.life;
-      while (damageTaken(stats, t, hi, zoneId) < stats.life && hi < 1e9) hi *= 2;
+      let hi = pool;
+      while (damageTaken(stats, t, hi, zoneId) < pool && hi < 1e9) hi *= 2;
       for (let i = 0; i < 60; i++) {
         const mid = (lo + hi) / 2;
-        if (damageTaken(stats, t, mid, zoneId) < stats.life) lo = mid;
+        if (damageTaken(stats, t, mid, zoneId) < pool) lo = mid;
         else hi = mid;
       }
       out[t] = hi;
@@ -2095,7 +2197,15 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const mods = collectModifiers(character);
     const { flat, inc, more, sources } = group(mods);
     const skill = SKILLS[character.skill && character.skill.id || "cleave"];
-    const life = Math.round(flat("life") * (1 + inc("life") / 100) * more("life"));
+    let life = Math.round(flat("life") * (1 + inc("life") / 100) * more("life"));
+    const hollow = flat("hollowVessel") > 0;
+    let esFlat = flat("energyShield");
+    if (hollow) {
+      esFlat += 2 * life;
+      life = 1;
+    }
+    const energyShield = Math.round(esFlat * (1 + inc("energyShield") / 100) * more("energyShield"));
+    const chaosImmune = hollow;
     const mana = Math.round(flat("mana") * (1 + inc("mana") / 100) * more("mana"));
     const manaRegen = mana * PLAYER.manaRegenPctPerSec * (1 + inc("manaRegen") / 100);
     const noRegen = flat("noRegen") > 0;
@@ -2206,6 +2316,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       cannotEvade,
       noRegen,
       lessDamageTaken: Math.min(50, flat("lessDamageTaken")),
+      energyShield,
+      chaosImmune,
+      itemQuantity: flat("itemQuantity"),
       keystones: (character.passives || []).filter((id) => PASSIVES[id] && PASSIVES[id].type === "keystone"),
       skill: { id: skillId, name: skill.name, kind: skill.kind, damageType: mainPart.type, tags: skill.tags, supports: supportIds },
       damage: {
@@ -2251,6 +2364,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         lightningRes: sources("lightningRes"),
         chaosRes: sources("chaosRes"),
         lifeRegen: sources("lifeRegen"),
+        energyShield: sources("energyShield"),
         manaRegen: sources("manaRegen"),
         physical: sources("physical"),
         addedPhys: sources("addedPhys"),
@@ -2518,6 +2632,19 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const s = getStats(state2);
     state2.player.life = Math.min(state2.player.life, s.life);
     state2.player.mana = Math.min(state2.player.mana, s.mana);
+    state2.player.es = Math.min(state2.player.es ?? s.energyShield, s.energyShield);
+  }
+  var ES_RECHARGE_DELAY = 2;
+  var ES_RECHARGE_RATE = 0.2;
+  function applyDamage(state2, amount, type) {
+    const p = state2.player;
+    p.lastDamageAt = state2.time;
+    if (type !== "chaos" && p.es > 0) {
+      const absorbed = Math.min(p.es, amount);
+      p.es -= absorbed;
+      amount -= absorbed;
+    }
+    p.life -= amount;
   }
   function newUid(state2) {
     return () => state2.nextUid++;
@@ -2535,7 +2662,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       seed,
       rngState: seed,
       time: 0,
-      character: { level: 1, xp: 0, skill: { id: "cleave", supports: [] }, passives: ["origin"], equipment: Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null])) },
+      character: { level: 1, xp: 0, skill: { id: "cleave", supports: [] }, passives: ["origin"], atlas: [], equipment: Object.fromEntries(EQUIP_SLOTS.map((k) => [k, null])) },
       ownedSupports: [...LINKS.startingSupports],
       player: { life: 1, mana: 1, attackTimer: 0 },
       inventory: [],
@@ -2563,6 +2690,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const s = getStats(state2);
     state2.player.life = s.life;
     state2.player.mana = s.mana;
+    state2.player.es = s.energyShield;
     startRun(state2, 1);
     log(state2, "info", "Your character sets out for The Sunken Yard.");
     return state2;
@@ -2592,6 +2720,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (typeof zoneId === "number") state2.zoneId = zoneId;
     state2.player.life = s.life;
     state2.player.mana = s.mana;
+    state2.player.es = s.energyShield;
     state2.player.attackTimer = 0;
     state2.player.blight = [];
     state2.run = {
@@ -2617,6 +2746,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const p = state2.player;
     const extra = outOfCombat ? s.life * PLAYER.outOfCombatRegenPctPerSec : 0;
     p.life = Math.min(s.life, p.life + (s.lifeRegen + extra) * dt2);
+    if (s.energyShield > 0) {
+      const idle = outOfCombat || state2.time - (p.lastDamageAt ?? -99) >= ES_RECHARGE_DELAY;
+      if (idle) p.es = Math.min(s.energyShield, (p.es ?? 0) + s.energyShield * ES_RECHARGE_RATE * (outOfCombat ? 2 : 1) * dt2);
+    } else p.es = 0;
     p.mana = Math.min(s.mana, p.mana + s.manaRegen * dt2);
   }
   function tick(state2) {
@@ -2773,7 +2906,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (!p.blight || !p.blight.length) return false;
     const raw = p.blight.reduce((a, b) => a + b.dps, 0) * DT;
     const taken = damageTaken(s, "chaos", raw, state2.run.zoneId);
-    p.life -= taken;
+    applyDamage(state2, taken, "chaos");
     const rec = state2.run.record;
     rec.damageByType.chaos = (rec.damageByType.chaos || 0) + taken;
     const recent = (_a = state2.run).recentHits || (_a.recentHits = []);
@@ -2883,14 +3016,14 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const extra = getZone(state2.run.zoneId).extraFire;
     if (extra) taken += damageTaken(s, "fire", raw * extra, state2.run.zoneId);
     taken = Math.max(0, taken);
-    p.life -= taken;
+    applyDamage(state2, taken, type);
     state2.run.lastHit = { raw, taken, type, isBig };
     const recent = (_a = state2.run).recentHits || (_a.recentHits = []);
     recent.push({ t: state2.time, threat: m.isBoss ? "boss" : m.threat, type, taken, raw, isBig });
     while (recent.length && recent[0].t < state2.time - RECENT_SECONDS) recent.shift();
     rec.damageByType[type] = (rec.damageByType[type] || 0) + taken;
     const key = `${m.isBoss ? "boss" : m.threat}:${type}${isBig ? ":big" : ""}`;
-    const pct2 = taken / s.life;
+    const pct2 = taken / (s.life + (type === "chaos" ? 0 : s.energyShield));
     const prev = rec.worstHits[key];
     if (!prev || pct2 > prev.pct) {
       rec.worstHits[key] = {
@@ -2921,7 +3054,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (typeof state2.run.zoneId === "number") xp *= 1 + 0.2 * legacyRank(state2, "quick_study");
     gainXp(state2, xp);
     rec.xp += xp;
-    const fortune = 1 + 0.05 * legacyRank(state2, "fortune");
+    const fortune = 1 + 0.05 * legacyRank(state2, "fortune") + getStats(state2).itemQuantity / 100;
     const drops = rollMonsterDrops(rng(state2), { ...m, dropMult: m.dropMult * fortune }, newUid(state2));
     const pl = state2.run.pendingLoot;
     const mech = state2.league.mechanic;
@@ -2957,6 +3090,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       const s = getStats(state2);
       state2.player.life = s.life;
       state2.player.mana = s.mana;
+      state2.player.es = s.energyShield;
       log(state2, "level", `Level up! Now level ${ch.level}. Life ${s.life}.`);
     }
     if (ch.level >= PLAYER.levelCap) ch.xp = 0;
@@ -3079,6 +3213,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (!mp.cleared.includes(map.tier)) {
       mp.cleared.push(map.tier);
       mp.highest = Math.max(mp.highest, map.tier);
+      state2.character.atlas = [...mp.cleared];
+      invalidateStats(state2);
       log(state2, "clear", `First clear of a tier ${map.tier} map!`);
       if (MAP_RULES.bonusPointTiers.includes(map.tier)) log(state2, "level", "You gain 2 passive points.");
       if (map.tier === AUTOMATION.mapRunner.mapTier) log(state2, "clear", "Map runner unlocked (Automation tab).");
@@ -3343,6 +3479,11 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     if (!node) return "Unknown node.";
     if (have.includes(id)) return "Already allocated.";
     if (!node.links.some((n) => have.includes(n))) return "Allocate a connected node first.";
+    if (id.endsWith("_gate")) {
+      const otherGate = have.find((n) => n.endsWith("_gate"));
+      const viaBranch = node.links.some((n) => n !== "origin" && have.includes(n));
+      if (otherGate && !viaBranch) return `Your start region is ${PASSIVES[otherGate].name.replace(" Gate", "")}. Reach other regions through the bridges.`;
+    }
     if (passivesSpent(state2) >= passivePoints(state2)) return "No passive points left. You get one per level.";
     return null;
   }
@@ -3619,6 +3760,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     data.mapProgress || (data.mapProgress = { cleared: [], highest: 0 });
     data.mapRunner || (data.mapRunner = { on: false, order: "highest" });
     data.legacy || (data.legacy = newLegacy());
+    if (data.character && !data.character.atlas) data.character.atlas = data.mapProgress ? [...data.mapProgress.cleared] : [];
     data.league || (data.league = { number: 1, mechanic: null, challenges: [], shards: 0, start: 0, zone10Deaths: 0 });
     if (data.version === 1) {
       data.character.skill = { id: data.character.skillId || "cleave", supports: [] };
@@ -3978,6 +4120,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <div class="level-row"><span class="level">Level ${ch.level}</span><span class="muted small">${fmt(ch.xp)} / ${fmt(need)} XP</span></div>
     ${bar("xp", ch.xp, need, "")}
     ${bar("life", Math.max(0, p.life), s.life, `Life ${fmt(Math.max(0, p.life))} / ${fmt(s.life)}`)}
+    ${s.energyShield > 0 ? bar("es", p.es || 0, s.energyShield, `Energy shield ${fmt(p.es || 0)} / ${fmt(s.energyShield)}`) : ""}
     ${bar("mana", p.mana, s.mana, `Mana ${fmt(p.mana)} / ${fmt(s.mana)}`)}
     ${p.blight && p.blight.length ? `<div class="blight small">Blight \xD7${p.blight.length}: losing ${fmt(p.blight.reduce((a, b) => a + b.dps, 0) * (1 - effectiveRes(s, "chaos", area) / 100))} life per second</div>` : ""}
     <h3>Offence <span class="muted small">${s.skill.name}${s.skill.supports.length ? ` + ${s.skill.supports.length} support${s.skill.supports.length > 1 ? "s" : ""}` : ""}</span></h3>
@@ -3991,10 +4134,11 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     <h3>Defence</h3>
     <div class="kv"><span>Armour</span><b>${fmt(s.armour)}</b></div>
     <div class="kv"><span>Evasion</span><b>${fmt(s.evasion)}</b></div>
+    ${s.energyShield > 0 ? `<div class="kv"><span>Energy shield</span><b>${fmt(s.energyShield)}</b></div>` : ""}
     <div class="kv"><span>Life regen</span><b>${fmt1(s.lifeRegen)}/s</b></div>
     ${["fire", "cold", "lightning", "chaos"].map(resRow).join("")}
     <h3>Max hit you can survive</h3>
-    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap(t)}<b>${fmt(mh[t])}</b></div>`).join("")}</div>
+    <div class="maxhit">${DAMAGE_TYPES.map((t) => `<div><span class="dot dot-${t}"></span>${cap(t)}<b>${Number.isFinite(mh[t]) ? fmt(mh[t]) : "immune"}</b></div>`).join("")}</div>
     <div class="kv boss-ttk"><span>Time to kill ${esc(zone.boss.name)}</span><b>${fmt(ttk)}s</b></div>
   `;
   }
@@ -4262,6 +4406,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       ${row("Maximum mana", fmt(s.mana), "mana")}
       ${row("Armour", fmt(s.armour), "armour")}
       ${row("Evasion", fmt(s.evasion), "evasion")}
+      ${row("Energy shield", fmt(s.energyShield), "energyShield")}
       ${row("Fire resistance", `${s.res.fire}%`, "fireRes", "%")}
       ${row("Cold resistance", `${s.res.cold}%`, "coldRes", "%")}
       ${row("Lightning resistance", `${s.res.lightning}%`, "lightningRes", "%")}
@@ -4405,6 +4550,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
       <li>You get 1 point per level, plus 2 each for first clearing zones 5 and 10.</li>
       <li>Bridges between regions let you mix, e.g. attacks with life, or crits with spells.</li>
       <li>A node can be taken once it touches one you already have. <b>Ctrl+click</b> a node to allocate it straight away.</li>
+      <li>Your first region gate picks your <b>start region</b>. Other regions are reached through the bridges between regions.</li>
       <li>Big diamond nodes are <b>keystones</b>: they change a rule of the game, with a real cost.</li>
       <li>Refunding a node costs ${refundCost(state2)} Scrap at your level.</li>
     </ul>`;
@@ -4435,7 +4581,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   </div>`;
   }
   var FAMILY_GROUPS = [
-    ["Defence", ["life", "armour", "ring_armour", "evasion", "piece_evasion", "life_regen"]],
+    ["Defence", ["life", "armour", "ring_armour", "evasion", "piece_evasion", "energy_shield", "piece_es", "es_inc", "life_regen"]],
     ["Resistances", ["fire_res", "cold_res", "lightning_res", "chaos_res"]],
     ["Attacks", ["phys_inc", "added_phys", "ring_added_phys", "attack_speed"]],
     ["Spells and elements", ["spell_inc", "cast_speed", "ring_ele_inc", "ignite_chance", "shock_chance", "chill_effect"]],
@@ -4497,8 +4643,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const tiers2 = Array.from({ length: MAP_RULES.maxTier }, (_, i) => i + 1).map((t) => {
       const done = mp.cleared.includes(t);
       const bonus = MAP_RULES.bonusPointTiers.includes(t);
-      return `<span class="tier-cell ${done ? "done" : ""}" title="Tier ${t}${done ? ": cleared" : ""}${bonus ? " \xB7 2 passive points on first clear" : ""}">${t}${bonus ? "<i>+2</i>" : ""}</span>`;
+      return `<span class="tier-cell ${done ? "done" : ""}" title="Tier ${t}${done ? ": cleared" : ""} \xB7 Atlas: ${ATLAS_BONUSES[t].text}${bonus ? " \xB7 2 passive points on first clear" : ""}">${t}${bonus ? "<i>+2</i>" : ""}</span>`;
     }).join("");
+    const atlas = Array.from({ length: MAP_RULES.maxTier }, (_, i) => i + 1).map((t) => `<li class="${mp.cleared.includes(t) ? "done" : ""}"><span class="tick" aria-hidden="true">${mp.cleared.includes(t) ? "\u2713" : ""}</span>T${t}: ${esc(ATLAS_BONUSES[t].text)}</li>`).join("");
     let detail = '<p class="muted">Select a map to see its monsters, mods and rewards, then run it. Running a map uses it up, whether you clear it or die.</p>';
     if (sel) {
       const L2 = MAP_LAYOUTS[sel.layout];
@@ -4526,6 +4673,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return `<div class="gear-grid">
     <section class="gear-left">
       <h3>Tiers cleared</h3><div class="tier-grid">${tiers2}</div>
+      <details class="atlas"><summary><span>Atlas bonuses</span><b>${mp.cleared.length} / ${MAP_RULES.maxTier}</b></summary><p class="muted small">The first clear of each tier gives a bonus for the rest of the league.</p><ul class="challenges">${atlas}</ul></details>
       ${inMap}${runner}
       <h3>Map stash <span class="muted small">${state2.maps.length} / ${MAP_RULES.stashSize}</span></h3>
       <div class="inv">${list.map((m) => mapRow(m, sel === m)).join("") || '<p class="muted small empty">No maps. Clear zone 10 or a map to find more.</p>'}</div>

@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test tests/*.test.js",
     "balance": "node tools/balance.js",
-    "build": "node tools/build.js"
+    "build": "node tools/build.js",
+    "lategame": "node tools/lategame.js"
   },
   "keywords": [],
   "author": "",

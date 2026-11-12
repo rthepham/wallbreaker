@@ -51,6 +51,8 @@ export const BASES = {
   warden_brigandine: { slot: 'body', name: 'Warden Brigandine', ilvl: 28, implicits: [I('armour', 110), I('evasion', 110)] },
   knight_plate: { slot: 'body', name: 'Knight Plate', ilvl: 34, implicits: [I('armour', 220)] },
   shadow_garb: { slot: 'body', name: 'Shadow Garb', ilvl: 34, implicits: [I('evasion', 220)] },
+  silk_robe: { slot: 'body', name: 'Silk Robe', ilvl: 5, implicits: [I('energyShield', 25)] },
+  sage_vestment: { slot: 'body', name: 'Sage Vestment', ilvl: 30, implicits: [I('energyShield', 90)] },
 
   // Helmets
   leather_cap: { slot: 'helmet', name: 'Leather Cap', ilvl: 1, implicits: [I('evasion', 10)] },
@@ -58,6 +60,8 @@ export const BASES = {
   sage_circlet: { slot: 'helmet', name: 'Sage Circlet', ilvl: 12, implicits: [I('mana', 20)] },
   hunter_hood: { slot: 'helmet', name: 'Hunter Hood', ilvl: 20, implicits: [I('evasion', 50)] },
   visored_helm: { slot: 'helmet', name: 'Visored Helm', ilvl: 20, implicits: [I('armour', 50)] },
+  silk_hood: { slot: 'helmet', name: 'Silk Hood', ilvl: 8, implicits: [I('energyShield', 12)] },
+  arcane_circlet: { slot: 'helmet', name: 'Arcane Circlet', ilvl: 34, implicits: [I('energyShield', 40)] },
   crowned_helm: { slot: 'helmet', name: 'Crowned Helm', ilvl: 36, implicits: [I('armour', 60), I('evasion', 60)] },
 
   // Gloves
@@ -66,6 +70,7 @@ export const BASES = {
   spellweave_gloves: { slot: 'gloves', name: 'Spellweave Gloves', ilvl: 14, implicits: [I('castSpeed', 5, 'increased')] },
   studded_gloves: { slot: 'gloves', name: 'Studded Gloves', ilvl: 20, implicits: [I('evasion', 40)] },
   plated_gauntlets: { slot: 'gloves', name: 'Plated Gauntlets', ilvl: 20, implicits: [I('armour', 40)] },
+  mystic_wraps: { slot: 'gloves', name: 'Mystic Wraps', ilvl: 10, implicits: [I('energyShield', 10)] },
   duelist_gloves: { slot: 'gloves', name: 'Duelist Gloves', ilvl: 32, implicits: [I('attackSpeed', 6, 'increased')] },
 
   // Boots
@@ -73,6 +78,7 @@ export const BASES = {
   iron_greaves: { slot: 'boots', name: 'Iron Greaves', ilvl: 1, implicits: [I('armour', 8)] },
   shadow_boots: { slot: 'boots', name: 'Shadow Boots', ilvl: 20, implicits: [I('evasion', 40)] },
   plated_greaves: { slot: 'boots', name: 'Plated Greaves', ilvl: 20, implicits: [I('armour', 40)] },
+  silk_slippers: { slot: 'boots', name: 'Silk Slippers', ilvl: 10, implicits: [I('energyShield', 10)] },
   pilgrim_boots: { slot: 'boots', name: 'Pilgrim Boots', ilvl: 30, implicits: [I('lifeRegen', 4)] },
 
   // Amulets
@@ -128,6 +134,21 @@ export const MODS = {
     name: 'Evasion', type: 'prefix', slots: ['helmet', 'gloves', 'boots'],
     stat: 'evasion', kind: 'flat', text: '+{v} to Evasion', weight: 70,
     tiers: tiers([[5, 10], [12, 22], [25, 38], [40, 60], [65, 90], [95, 120], [125, 150], [150, 200]]),
+  },
+  energy_shield: {
+    name: 'Energy Shield', type: 'prefix', slots: ['body'],
+    stat: 'energyShield', kind: 'flat', text: '+{v} to Energy Shield', weight: 80,
+    tiers: tiers([[8, 15], [16, 28], [29, 45], [46, 65], [66, 90], [91, 115], [116, 140], [141, 170]]),
+  },
+  piece_es: {
+    name: 'Energy Shield', type: 'prefix', slots: ['helmet', 'gloves', 'boots', 'amulet'],
+    stat: 'energyShield', kind: 'flat', text: '+{v} to Energy Shield', weight: 60,
+    tiers: tiers([[4, 8], [9, 15], [16, 24], [25, 35], [36, 48], [49, 62], [63, 76], [77, 92]]),
+  },
+  es_inc: {
+    name: 'Increased Energy Shield', type: 'prefix', slots: ['body', 'helmet'],
+    stat: 'energyShield', kind: 'increased', text: '{v}% increased Energy Shield', weight: 60,
+    tiers: tiers([[10, 15], [16, 22], [23, 30], [31, 39], [40, 49], [50, 59], [60, 69], [70, 80]]),
   },
   mana: {
     name: 'Maximum Mana', type: 'prefix', slots: ['ring', 'amulet', 'helmet'],

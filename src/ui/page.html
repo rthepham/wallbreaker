@@ -104,6 +104,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .bar-label { position: relative; font-family: var(--f-mono); font-size: 0.78rem; padding: 0 6px; line-height: 18px; white-space: nowrap; }
 .bar.life .bar-fill { background: var(--life); }
 .bar.mana .bar-fill { background: var(--mana); }
+.bar.es .bar-fill { background: #2f7f8f; }
 .bar.xp { height: 6px; }
 .bar.xp .bar-fill { background: var(--xp); }
 .bar.mlife { height: 14px; margin: 0; }
@@ -406,6 +407,7 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
         <ul>
           <li>Each zone is 10 packs of monsters, then a boss. Beating the boss the first time opens the next zone.</li>
           <li><b>Damage types matter.</b> Fire sets enemies burning (great on bosses). Lightning shocks them so they take more damage. Cold chills them so they attack slower. Heavy physical hits stun. Some enemies resist a type: Brutes shrug off physical, casters resist their own element. The zone header shows who resists what.</li>
+          <li><b>Energy shield</b> takes hits before your life (except chaos) and refills after 2 seconds without taking damage.</li>
           <li><b>Zones 6–10:</b> your elemental resistances are 20% lower, so re-cap them. <b>Blight</b> monsters stack chaos damage over time on you (up to 5 stacks): chaos resistance and life regeneration are the answer. From zone 8, monsters resist all elements a little.</li>
           <li>Each zone mixes threat types. <b>Swarms</b> test how many enemies you hit at once. <b>Brutes</b> hit hard and slow and test armour and life. <b>Casters</b> throw elemental bolts and test resistances. <b>Bosses</b> test single-target damage and your biggest hit taken.</li>
           <li>Loot is picked up when a pack dies. If you die, you lose that pack's loot and a little XP, then restart the zone.</li>

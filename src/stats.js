@@ -5,7 +5,7 @@ import { PLAYER } from './data/player.js';
 import { BASES, MODS, SLOT_NAMES } from './data/items.js';
 import { SKILLS, SUPPORTS } from './data/skills.js';
 import { zoneResPenalty, zoneMaxResMinus } from './data/zones.js';
-import { PASSIVES } from './data/passives.js';
+import { PASSIVES, ATLAS_BONUSES } from './data/passives.js';
 import { AILMENTS } from './data/ailments.js';
 
 export const DAMAGE_TYPES = ['physical', 'fire', 'cold', 'lightning', 'chaos'];
@@ -20,6 +20,10 @@ export function collectModifiers(character) {
   const L = character.level;
   mods.push({ stat: 'life', kind: 'flat', value: PLAYER.life.base + PLAYER.life.perLevel * L, source: `Level ${L}` });
   mods.push({ stat: 'mana', kind: 'flat', value: PLAYER.mana.base + PLAYER.mana.perLevel * L, source: `Level ${L}` });
+  for (const t of character.atlas || []) {
+    const b = ATLAS_BONUSES[t];
+    if (b) for (const m of b.mods) mods.push({ ...m, source: `Atlas: tier ${t}` });
+  }
   for (const id of character.passives || []) {
     const node = PASSIVES[id];
     if (!node) continue;
@@ -80,6 +84,7 @@ export function effectiveRes(stats, type, zoneId) {
 
 // Damage actually taken from one hit of the given type.
 export function damageTaken(stats, type, hit, zoneId) {
+  if (type === 'chaos' && stats.chaosImmune) return 0;
   const less = 1 - (stats.lessDamageTaken || 0) / 100;
   if (type === 'physical') return hit * (1 - armourReduction(stats.armour, hit)) * less;
   let taken = hit * (1 - effectiveRes(stats, type, zoneId) / 100);
@@ -93,12 +98,18 @@ export function damageTaken(stats, type, hit, zoneId) {
 export function maxHitTaken(stats, zoneId) {
   const out = {};
   for (const t of DAMAGE_TYPES) {
+    // Chaos skips energy shield; everything else hits it first.
+    const pool = stats.life + (t === 'chaos' ? 0 : stats.energyShield || 0);
+    if (t === 'chaos' && stats.chaosImmune) {
+      out[t] = Infinity;
+      continue;
+    }
     let lo = 0;
-    let hi = stats.life;
-    while (damageTaken(stats, t, hi, zoneId) < stats.life && hi < 1e9) hi *= 2;
+    let hi = pool;
+    while (damageTaken(stats, t, hi, zoneId) < pool && hi < 1e9) hi *= 2;
     for (let i = 0; i < 60; i++) {
       const mid = (lo + hi) / 2;
-      if (damageTaken(stats, t, mid, zoneId) < stats.life) lo = mid;
+      if (damageTaken(stats, t, mid, zoneId) < pool) lo = mid;
       else hi = mid;
     }
     out[t] = hi;
@@ -111,7 +122,17 @@ export function computeStats(character) {
   const { flat, inc, more, sources } = group(mods);
   const skill = SKILLS[(character.skill && character.skill.id) || 'cleave'];
 
-  const life = Math.round(flat('life') * (1 + inc('life') / 100) * more('life'));
+  let life = Math.round(flat('life') * (1 + inc('life') / 100) * more('life'));
+  // Energy shield: a second pool that takes hits before life (not chaos).
+  // Hollow Vessel: life becomes 1, gain energy shield equal to twice your life, immune to chaos.
+  const hollow = flat('hollowVessel') > 0;
+  let esFlat = flat('energyShield');
+  if (hollow) {
+    esFlat += 2 * life;
+    life = 1;
+  }
+  const energyShield = Math.round(esFlat * (1 + inc('energyShield') / 100) * more('energyShield'));
+  const chaosImmune = hollow;
   const mana = Math.round(flat('mana') * (1 + inc('mana') / 100) * more('mana'));
   const manaRegen = mana * PLAYER.manaRegenPctPerSec * (1 + inc('manaRegen') / 100);
   const noRegen = flat('noRegen') > 0;
@@ -220,6 +241,7 @@ export function computeStats(character) {
     level: character.level,
     life, mana, lifeRegen, manaRegen, armour, evasion, res, maxRes, armourVsEle, cannotEvade, noRegen,
     lessDamageTaken: Math.min(50, flat('lessDamageTaken')),
+    energyShield, chaosImmune, itemQuantity: flat('itemQuantity'),
     keystones: (character.passives || []).filter((id) => PASSIVES[id] && PASSIVES[id].type === 'keystone'),
     skill: { id: skillId, name: skill.name, kind: skill.kind, damageType: mainPart.type, tags: skill.tags, supports: supportIds },
     damage: {
@@ -232,7 +254,7 @@ export function computeStats(character) {
       life: sources('life'), mana: sources('mana'), armour: sources('armour'),
       evasion: sources('evasion'), fireRes: sources('fireRes'), coldRes: sources('coldRes'),
       lightningRes: sources('lightningRes'), chaosRes: sources('chaosRes'),
-      lifeRegen: sources('lifeRegen'), manaRegen: sources('manaRegen'),
+      lifeRegen: sources('lifeRegen'), energyShield: sources('energyShield'), manaRegen: sources('manaRegen'),
       physical: sources('physical'), addedPhys: sources('addedPhys'),
       attackSpeed: sources('attackSpeed'), castSpeed: sources('castSpeed'), critChance: sources('critChance'),
       attack: sources('attack'),
