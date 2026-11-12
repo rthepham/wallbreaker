@@ -755,7 +755,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     // DOC: doc uses 52 + 2 x tier. Our zone 10 is level 42, so tier 1 matches it
     // (the step up is the larger resistance penalty and map mods).
     levelBase: 40,
-    levelPerTier: 2,
+    // DOC: doc adds 2 levels per tier. With this game's monster scaling that is
+    // +30% monster life per tier, which outran gear by tier 3-4 in playtesting.
+    levelPerTier: 1,
     // DOC: doc says -40% resistances in maps. -30% keeps the 75% cap reachable with gear.
     resPenalty: 30,
     // Monsters resist all elements: 10% at tier 1 rising to 30% at tier 16.
@@ -768,7 +770,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     dropCount: [[0, 30], [1, 50], [2, 20]],
     // Rare monsters inside maps can drop a map too (raised by the map's item quantity).
     rareMonsterChance: 0.08,
-    tierShift: [[-1, 20], [0, 60], [1, 20]],
+    // Raised the chance of a higher-tier drop from 20% after playtest feedback.
+    tierShift: [[-1, 15], [0, 55], [1, 30]],
     rarityWeights: { normal: 70, magic: 25, rare: 5 },
     // First clears of these tiers give 2 passive points each.
     bonusPointTiers: [4, 8, 12]

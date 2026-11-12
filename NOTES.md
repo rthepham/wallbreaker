@@ -30,7 +30,8 @@ Built: milestones M0–M12 in prototype form.
 | Monster life / hit growth per level | 1.11 / 1.075 | 1.14 / 1.08 (damage scale 0.46) | Keeps walls after supports + passives without zone 8+ one-shotting |
 | Zone levels 6–10 | ~5/zone to 50 | 23, 28, 33, 38, 42 | Pacing |
 | Chaos res tiers | from ilvl 40 | from ilvl 22 | Blight arrives in zone 7 |
-| Map level | 52 + 2×tier | 40 + 2×tier | Tier 1 matches zone 10 |
+| Map level | 52 + 2×tier | 40 + 1×tier | Tier 1 matches zone 10; 2/tier outran gear by tier 3–4 in playtest |
+| Map tier of drops | – | 15% lower / 55% same / 30% higher | Playtest: tier-ups too rare |
 | Map resistance penalty | −40% | −30% | Keeps the cap reachable |
 | Link slots | 3rd zone 6, 4th map T1, 5th map T8 | zone 3 / 5 / 8 | Earlier build depth |
 | Inventory | – | 120 slots | 8 slots of drops |
