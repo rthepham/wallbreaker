@@ -5,7 +5,7 @@ import { PLAYER, RULES } from './data/player.js';
 import { MONSTERS, THREATS } from './data/monsters.js';
 import { ZONES, areaById, registerArea } from './data/zones.js';
 import { MAP_RULES } from './data/maps.js';
-import { makeMap, mapArea, rollMapDrops, craftMap } from './maps.js';
+import { makeMap, mapArea, rollMapDrops, craftMap, rollRareMonsterMap } from './maps.js';
 import { BASES, EQUIP_SLOTS, slotsForType, MODS } from './data/items.js';
 import { CURRENCY_ORDER } from './data/currency.js';
 import { SKILLS, SUPPORTS, SUPPORT_ORDER, LINKS, supportFits } from './data/skills.js';
@@ -515,6 +515,14 @@ function monsterKilled(state, m) {
   pl.items.push(...drops.items);
   for (const [c, n] of Object.entries(drops.currency)) pl.currency[c] = (pl.currency[c] || 0) + n;
   if (m.isBoss || m.rarity === 'rare') log(state, 'kill', `${m.name} dies.`);
+  // Rare monsters in maps can drop a map; it waits in the pack's loot like items do.
+  if (m.rarity === 'rare' && state.run.map) {
+    const dropped = rollRareMonsterMap(rng(state), state.run.map, state.mapProgress.highest, state.nextUid);
+    if (dropped) {
+      state.nextUid++;
+      (pl.maps ||= []).push(dropped);
+    }
+  }
 }
 
 export function gainXp(state, amount) {
@@ -581,6 +589,10 @@ export function lootAction(state, item) {
 function pickUpLoot(state) {
   const pl = state.run.pendingLoot;
   const rec = state.run.record;
+  if (pl.maps && pl.maps.length) {
+    addMaps(state, pl.maps);
+    log(state, 'loot rare', `A rare monster dropped a tier ${pl.maps.map((m) => m.tier).join(', ')} map.`);
+  }
   let autoCount = 0;
   let autoScrap = 0;
   for (const item of pl.items) {

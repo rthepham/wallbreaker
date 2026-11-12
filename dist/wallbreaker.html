@@ -766,6 +766,8 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     zone10BossChance: 0.15,
     // Maps dropped by a map's boss: how many, and their tier relative to the map.
     dropCount: [[0, 30], [1, 50], [2, 20]],
+    // Rare monsters inside maps can drop a map too (raised by the map's item quantity).
+    rareMonsterChance: 0.08,
     tierShift: [[-1, 20], [0, 60], [1, 20]],
     rarityWeights: { normal: 70, magic: 25, rare: 5 },
     // First clears of these tiers give 2 passive points each.
@@ -917,12 +919,19 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     return { ok: true };
   }
   var weighted = (rng2, pairs) => rng2.weighted(pairs, (p) => p[1])[0];
+  function rollDropTier(rng2, sourceTier, highestCleared) {
+    return Math.max(1, Math.min(MAP_RULES.maxTier, highestCleared + 1, sourceTier + weighted(rng2, MAP_RULES.tierShift)));
+  }
+  function rollRareMonsterMap(rng2, map, highestCleared, uid) {
+    if (!rng2.chance(MAP_RULES.rareMonsterChance * (1 + mapIiq(map) / 100))) return null;
+    return makeMap(rng2, uid, rollDropTier(rng2, map.tier, highestCleared), weighted(rng2, Object.entries(MAP_RULES.rarityWeights)));
+  }
   function rollMapDrops(rng2, map, highestCleared, nextUid) {
     let count = weighted(rng2, MAP_RULES.dropCount);
     if (rng2.chance(mapIiq(map) / 100)) count++;
     const out = [];
     for (let i = 0; i < count; i++) {
-      const tier = Math.max(1, Math.min(MAP_RULES.maxTier, highestCleared + 1, map.tier + weighted(rng2, MAP_RULES.tierShift)));
+      const tier = rollDropTier(rng2, map.tier, highestCleared);
       out.push(makeMap(rng2, nextUid(), tier, weighted(rng2, Object.entries(MAP_RULES.rarityWeights))));
     }
     return out;
@@ -2924,6 +2933,13 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     pl.items.push(...drops.items);
     for (const [c, n] of Object.entries(drops.currency)) pl.currency[c] = (pl.currency[c] || 0) + n;
     if (m.isBoss || m.rarity === "rare") log(state2, "kill", `${m.name} dies.`);
+    if (m.rarity === "rare" && state2.run.map) {
+      const dropped = rollRareMonsterMap(rng(state2), state2.run.map, state2.mapProgress.highest, state2.nextUid);
+      if (dropped) {
+        state2.nextUid++;
+        (pl.maps || (pl.maps = [])).push(dropped);
+      }
+    }
   }
   function gainXp(state2, amount) {
     const ch = state2.character;
@@ -2984,6 +3000,10 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
   function pickUpLoot(state2) {
     const pl = state2.run.pendingLoot;
     const rec = state2.run.record;
+    if (pl.maps && pl.maps.length) {
+      addMaps(state2, pl.maps);
+      log(state2, "loot rare", `A rare monster dropped a tier ${pl.maps.map((m) => m.tier).join(", ")} map.`);
+    }
     let autoCount = 0;
     let autoScrap = 0;
     for (const item of pl.items) {

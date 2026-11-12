@@ -16,6 +16,8 @@ export const MAP_RULES = {
   zone10BossChance: 0.15,
   // Maps dropped by a map's boss: how many, and their tier relative to the map.
   dropCount: [[0, 30], [1, 50], [2, 20]],
+  // Rare monsters inside maps can drop a map too (raised by the map's item quantity).
+  rareMonsterChance: 0.08,
   tierShift: [[-1, 20], [0, 60], [1, 20]],
   rarityWeights: { normal: 70, magic: 25, rare: 5 },
   // First clears of these tiers give 2 passive points each.

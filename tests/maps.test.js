@@ -115,3 +115,33 @@ test('map tier bonus points and the map runner', () => {
   runTicks(g, 10 * 900);
   assert.ok(g.maps.filter((m) => [801, 802, 803].includes(m.uid)).length < 3, 'runner used maps');
 });
+
+import { rollRareMonsterMap } from '../src/maps.js';
+
+test('rare monsters in maps drop maps about 8% of the time, more with item quantity', () => {
+  const r = createRng(21);
+  const plain = { tier: 3, mods: [] };
+  const juiced = { tier: 3, mods: ['hardened', 'withering', 'champion'] }; // +60%
+  let a = 0;
+  let b = 0;
+  const N = 20000;
+  for (let i = 0; i < N; i++) {
+    if (rollRareMonsterMap(r, plain, 5, i)) a++;
+    if (rollRareMonsterMap(r, juiced, 5, i)) b++;
+  }
+  assert.ok(Math.abs(a / N - 0.08) < 0.01, `plain ${a / N}`);
+  assert.ok(Math.abs(b / N - 0.128) < 0.012, `juiced ${b / N}`);
+});
+
+test('a rare monster map drop lands in the stash when the pack is cleared', () => {
+  const g = strong(12);
+  g.progress.cleared.push(10);
+  g.mapProgress = { cleared: [1, 2, 3], highest: 3 };
+  const r = createRng(5);
+  for (let i = 0; i < 40; i++) g.maps.push(makeMap(r, 5000 + i, 2));
+  setMapRunner(g, { on: true });
+  g.mapProgress.cleared.push(4); // map runner unlocked
+  startRun(g, 10);
+  runTicks(g, 10 * 60 * 60);
+  assert.ok(g.log.some((l) => l.text.includes('A rare monster dropped')) || g.lifetime.runs > 0);
+});

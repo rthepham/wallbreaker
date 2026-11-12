@@ -95,6 +95,17 @@ export function craftMap(rng, currencyId, map, currency) {
 
 const weighted = (rng, pairs) => rng.weighted(pairs, (p) => p[1])[0];
 
+// Tier for a dropped map: around the source map's tier, never past one above your best clear.
+export function rollDropTier(rng, sourceTier, highestCleared) {
+  return Math.max(1, Math.min(MAP_RULES.maxTier, highestCleared + 1, sourceTier + weighted(rng, MAP_RULES.tierShift)));
+}
+
+// A rare monster inside a map may carry a map.
+export function rollRareMonsterMap(rng, map, highestCleared, uid) {
+  if (!rng.chance(MAP_RULES.rareMonsterChance * (1 + mapIiq(map) / 100))) return null;
+  return makeMap(rng, uid, rollDropTier(rng, map.tier, highestCleared), weighted(rng, Object.entries(MAP_RULES.rarityWeights)));
+}
+
 // Maps dropped when a map's boss dies. Higher item quantity means more drops.
 // Tiers never go above one past the highest tier you've cleared.
 export function rollMapDrops(rng, map, highestCleared, nextUid) {
@@ -102,7 +113,7 @@ export function rollMapDrops(rng, map, highestCleared, nextUid) {
   if (rng.chance(mapIiq(map) / 100)) count++;
   const out = [];
   for (let i = 0; i < count; i++) {
-    const tier = Math.max(1, Math.min(MAP_RULES.maxTier, highestCleared + 1, map.tier + weighted(rng, MAP_RULES.tierShift)));
+    const tier = rollDropTier(rng, map.tier, highestCleared);
     out.push(makeMap(rng, nextUid(), tier, weighted(rng, Object.entries(MAP_RULES.rarityWeights))));
   }
   return out;
