@@ -238,6 +238,7 @@ select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1
 .compare th, .compare td { text-align: right; padding: 3px 6px; border-bottom: 1px dotted #262b37; font-variant-numeric: tabular-nums; }
 .compare th:first-child, .compare td:first-child { text-align: left; }
 .compare th { color: var(--muted); font-weight: 500; }
+.compare .pct { opacity: 0.8; font-size: 0.85em; }
 .cur-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 .cur-btn { display: grid; grid-template-columns: 1fr auto; text-align: left; gap: 0 6px; }
 .cur-btn .count { font-family: var(--f-mono); color: var(--brass); }
@@ -4232,7 +4233,9 @@ textarea { width: 100%; font: 0.78rem var(--f-mono); color: var(--ink); backgrou
     const show = (v, dec) => dec ? v.toFixed(dec) : fmt(v);
     const out = rows.filter(([, a, b, , dec = 0]) => Math.abs(a - b) >= 0.5 / 10 ** dec).map(([label, a, b, unit = "", dec = 0]) => {
       const diff = b - a;
-      return `<tr><td>${label}</td><td>${show(a, dec)}${unit}</td><td>${show(b, dec)}${unit}</td><td class="${diff > 0 ? "good" : "neg"}">${diff > 0 ? "+" : "\u2212"}${show(Math.abs(diff), dec)}${unit}</td></tr>`;
+      let rel = "";
+      if (unit !== "%") rel = a > 0 ? ` <span class="pct">(${diff > 0 ? "+" : "\u2212"}${Math.abs(diff / a * 100) >= 10 ? Math.round(Math.abs(diff / a * 100)) : Math.abs(diff / a * 100).toFixed(1)}%)</span>` : ' <span class="pct">(new)</span>';
+      return `<tr><td>${label}</td><td>${show(a, dec)}${unit}</td><td>${show(b, dec)}${unit}</td><td class="${diff > 0 ? "good" : "neg"}">${diff > 0 ? "+" : "\u2212"}${show(Math.abs(diff), dec)}${unit}${rel}</td></tr>`;
     });
     return out.length ? `<div class="table-wrap"><table class="compare"><thead><tr><th>${heading}</th><th>Now</th><th>After</th><th>Change</th></tr></thead><tbody>${out.join("")}</tbody></table></div>` : '<p class="muted small">This changes none of your main numbers.</p>';
   }

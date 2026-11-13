@@ -234,7 +234,10 @@ function compareRows(cur, alt, zoneId, heading = 'If equipped') {
   const show = (v, dec) => (dec ? v.toFixed(dec) : fmt(v));
   const out = rows.filter(([, a, b, , dec = 0]) => Math.abs(a - b) >= 0.5 / 10 ** dec).map(([label, a, b, unit = '', dec = 0]) => {
     const diff = b - a;
-    return `<tr><td>${label}</td><td>${show(a, dec)}${unit}</td><td>${show(b, dec)}${unit}</td><td class="${diff > 0 ? 'good' : 'neg'}">${diff > 0 ? '+' : '−'}${show(Math.abs(diff), dec)}${unit}</td></tr>`;
+    // Relative change, except for stats that are already percentages (resistances, crit chance).
+    let rel = '';
+    if (unit !== '%') rel = a > 0 ? ` <span class="pct">(${diff > 0 ? '+' : '−'}${Math.abs((diff / a) * 100) >= 10 ? Math.round(Math.abs((diff / a) * 100)) : Math.abs((diff / a) * 100).toFixed(1)}%)</span>` : ' <span class="pct">(new)</span>';
+    return `<tr><td>${label}</td><td>${show(a, dec)}${unit}</td><td>${show(b, dec)}${unit}</td><td class="${diff > 0 ? 'good' : 'neg'}">${diff > 0 ? '+' : '−'}${show(Math.abs(diff), dec)}${unit}${rel}</td></tr>`;
   });
   return out.length ? `<div class="table-wrap"><table class="compare"><thead><tr><th>${heading}</th><th>Now</th><th>After</th><th>Change</th></tr></thead><tbody>${out.join('')}</tbody></table></div>` : '<p class="muted small">This changes none of your main numbers.</p>';
 }
