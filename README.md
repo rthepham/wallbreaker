@@ -31,4 +31,4 @@ Pick the bot's skill with `SKILL=fireball` (or `cleave`, `arc`, `ice_nova`).
 - `tools/` – build script and the balance bot
 
 The game logic has no UI code in it, so it can be tested and simulated on its own.
-See `NOTES.md` for where the numbers differ from the original design doc and why.
+The design as built is in `docs/GDD.md`. `NOTES.md` records where and why the numbers moved away from the original design doc.

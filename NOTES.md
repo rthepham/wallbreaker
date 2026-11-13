@@ -1,5 +1,7 @@
 # Wallbreaker – prototype notes
 
+The current design, as built, is in `docs/GDD.md`. This file is the changelog of why things moved.
+
 Built: milestones M0–M12 in prototype form.
 - Zones 1–10 (Swarm, Brute, fire/cold/lightning Casters, Blight), resistance penalty from zone 6.
 - 8 gear slots, 7 item types, wands, ~30 mod families; inventory filters, sort, search, change chips.
